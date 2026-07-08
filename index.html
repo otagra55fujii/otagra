@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>画像マッピングコメント機能 (バグ完全修正版)</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root { --primary: #4CAF50; --danger: #f44336; --bg: #f9f9f9; --border: #ddd; }
+        * { box-sizing: border-box; font-family: sans-serif; }
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--bg); }
+        
+        /* ログイン */
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { padding: 20px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 90%; max-width: 320px; }
+        .login-box input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid var(--border); border-radius: 4px; }
+        .login-box button { width: 100%; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        
+        /* メイン */
+        #main-screen { display: none; flex-direction: column; height: 100%; }
+        #image-area { flex: 1; overflow: auto; position: relative; background: #e0e0e0; border-bottom: 2px solid var(--border); }
+        #image-container { position: relative; display: inline-block; transform-origin: top left; }
+        #main-image { max-width: none; display: block; }
+        .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
+        .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
+        
+        /* コメント */
+        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 70px; }
+        .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
+        .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
+        .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
+        .comment-header { font-size: 12px; color: #666; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
+        .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
+        
+        /* フォーム */
+        .add-comment-form { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+        .add-comment-form textarea { width: 100%; resize: vertical; padding: 5px; border: 1px solid var(--border); }
+        .add-comment-form button { align-self: flex-end; padding: 5px 15px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; }
+        
+        /* フッター */
+        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 10px; display: flex; justify-content: space-around; flex-wrap: wrap; z-index: 100; gap: 5px; }
+        #footer button, #footer label { background: white; color: #333; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        input[type="file"] { display: none; }
+        .hidden { display: none !important; }
+        #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
+        #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-box">
+            <h3>ログイン</h3>
+            <p style="font-size: 11px; color: #666; text-align: left;">
+                管理者: ADMIN123 / 参加者: USER1234
+            </p>
+            <input type="text" id="login-name" placeholder="表示名" required>
+            <input type="text" id="login-code" placeholder="招待コード(半角8文字)" maxlength="8" required>
+            <button onclick="login()">ログイン</button>
+        </div>
+    </div>
+
+    <div id="main-screen">
+        <div id="image-area">
+            <div id="image-container">
+                <img id="main-image" src="" style="display:none;">
+                <div id="pins-container"></div>
+            </div>
+        </div>
+
+        <div id="comment-area">
+            <div id="comment-content">
+                <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
+            </div>
+        </div>
+
+        <div id="footer">
+            <div id="sync-status">
+                <span id="status-text">● 同期待機中</span>
+                <span id="user-display"></span>
+            </div>
+            <label id="btn-load-img" class="hidden">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
+            <button onclick="saveJSON()">保存(JSON)</button>
+            <label>読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase 設定 ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6VadDP1MmJked58qiQ1ybqpJ_Euwtrjs",
+            authDomain: "vmcgemi-v010.firebaseapp.com",
+            databaseURL: "https://vmcgemi-v010-default-rtdb.firebaseio.com",
+            projectId: "vmcgemi-v010",
+            storageBucket: "vmcgemi-v010.firebasestorage.app",
+            messagingSenderId: "982163963744",
+            appId: "1:982163963744:web:6033d7646b2e7250e72805",
+            measurementId: "G-8JMVC0HCHY"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let currentUser = { name: "", role: "" }; 
+        let appData = { imageSrc: "", pins: [] };
+        let activePinId = null;
+
+        const ADMIN_CODE = "ADMIN123";
+        const USER_CODE = "USER1234";
+
+        function login() {
+            const name = document.getElementById('login-name').value.trim();
+            const code = document.getElementById('login-code').value.trim();
+            if (!name || code.length !== 8) return alert("入力に不備があります。");
+
+            if (code === ADMIN_CODE) currentUser = { name, role: 'admin' };
+            else if (code === USER_CODE) currentUser = { name, role: 'user' };
+            else return alert("無効なコードです。");
+
+            const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
+            document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
+
+            if (currentUser.role === 'admin') document.getElementById('btn-load-img').classList.remove('hidden');
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('main-screen').style.display = 'flex';
+            startListening();
+        }
+
+        function startListening() {
+            db.ref('appData').on('value', (snapshot) => {
+                const data = snapshot.val();
+                appData = data || { imageSrc: "", pins: [] };
+                
+                // Firebase特有のオブジェクト化現象を徹底的に配列へシリアライズする安全装置
+                if (appData.pins) {
+                    if (!Array.isArray(appData.pins)) {
+                        appData.pins = Object.values(appData.pins);
+                    }
+                    appData.pins.forEach(pin => {
+                        if (!pin.children) {
+                            pin.children = [];
+                        } else if (!Array.isArray(pin.children)) {
+                            pin.children = Object.values(pin.children);
+                        }
+                        pin.children.forEach(child => {
+                            if (!child.grandchildren) {
+                                child.grandchildren = [];
+                            } else if (!Array.isArray(child.grandchildren)) {
+                                child.grandchildren = Object.values(child.grandchildren);
+                            }
+                        });
+                    });
+                } else {
+                    appData.pins = [];
+                }
+
+                document.getElementById('status-text').innerText = "● リアルタイム同期中";
+                document.getElementById('sync-status').style.color = "#4CAF50";
+                renderApp();
+            });
+        }
+
+        function updateFirebase() {
+            db.ref('appData').set(appData);
+        }
+
+        function loadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const maxWidth = 1000;
+                    let width = img.width, height = img.height;
+                    if (width > maxWidth) { height = (maxWidth/width)*height; width = maxWidth; }
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    appData.imageSrc = canvas.toDataURL('image/jpeg', 0.7);
+                    appData.pins = [];
+                    activePinId = null;
+                    updateFirebase();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.getElementById('image-container').addEventListener('click', function(e) {
+            if (e.target.classList.contains('pin') || !appData.imageSrc) return;
+            const rect = this.getBoundingClientRect();
+            appData.pins.push({
+                id: Date.now().toString(),
+                number: appData.pins.length + 1,
+                x: ((e.clientX - rect.left) / rect.width) * 100,
+                y: ((e.clientY - rect.top) / rect.height) * 100,
+                mainComment: null, children: []
+            });
+            updateFirebase();
+        });
+
+        function renderApp() {
+            const imgEl = document.getElementById('main-image');
+            if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; }
+            const container = document.getElementById('pins-container');
+            container.innerHTML = '';
+            appData.pins.forEach(pin => {
+                const el = document.createElement('div');
+                el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
+                el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
+                el.innerText = pin.number;
+                el.onclick = (e) => { e.stopPropagation(); activePinId = pin.id; renderApp(); };
+                container.appendChild(el);
+            });
+            renderComments();
+        }
+
+        function renderComments() {
+            const container = document.getElementById('comment-content');
+            const pin = appData.pins.find(p => p.id === activePinId);
+            if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666;">ピンを選択してください</p>'; return; }
+            let html = `<h3>No.${pin.number}</h3>`;
+            if (!pin.mainComment) {
+                html += createForm('main', pin.id, null);
+            } else {
+                html += renderItem(pin.mainComment, 'main', pin.id, null, null);
+                (pin.children || []).forEach(c => {
+                    html += `<div class="child-comment">${renderItem(c, 'child', pin.id, c.id, null)}`;
+                    (c.grandchildren || []).forEach(g => {
+                        html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`;
+                    });
+                    if (!(c.grandchildren) || c.grandchildren.length < 10) {
+                        html += createForm('grand', pin.id, c.id);
+                    }
+                    html += `</div>`;
+                });
+                if ((pin.children || []).length < 10) {
+                    html += createForm('child', pin.id, null);
+                }
+            }
+            container.innerHTML = html;
+        }
+
+        function renderItem(item, type, pid, cid, gid) {
+            const cidArg = cid ? `'${cid}'` : 'null';
+            const gidArg = gid ? `'${gid}'` : 'null';
+            const editBtn = (currentUser.role === 'admin' || currentUser.name === item.author) ? 
+                `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button>
+                 <button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
+            return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div>
+                    <div class="comment-text">${item.text}</div><div class="comment-actions">${editBtn}</div></div>`;
+        }
+
+        function createForm(type, pid, cid) {
+            let targetId = '';
+            let btnArgs = `'${pid}', '${type}'`;
+            
+            if (type === 'main') { targetId = `in-main-${pid}`; btnArgs += `, null`; }
+            else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
+            else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
+            
+            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" rows="2"></textarea>
+                    <button onclick="addItem(${btnArgs})">投稿</button></div>`;
+        }
+
+        function addItem(pid, type, cid) {
+            let targetId = '';
+            if (type === 'main') targetId = `in-main-${pid}`;
+            else if (type === 'child') targetId = `in-child-${pid}`;
+            else if (type === 'grand') targetId = `in-grand-${cid}`;
+            
+            const txt = document.getElementById(targetId).value.trim();
+            if (!txt) return;
+            
+            const pin = appData.pins.find(p => p.id === pid);
+            const item = { author: currentUser.name, text: txt, timestamp: Date.now(), id: Date.now().toString() };
+            
+            if (type === 'main') {
+                pin.mainComment = item;
+            } else if (type === 'child') {
+                if (!pin.children) pin.children = [];
+                pin.children.push({ ...item, grandchildren: [] });
+            } else if (type === 'grand') {
+                const child = pin.children.find(c => c.id === cid);
+                if (!child.grandchildren) child.grandchildren = [];
+                child.grandchildren.push(item);
+            }
+            updateFirebase();
+        }
+
+        function editItem(pid, type, cid, gid) {
+            const pin = appData.pins.find(p => p.id === pid);
+            let target;
+            if (type === 'main') target = pin.mainComment;
+            else if (type === 'child') target = pin.children.find(c => c.id === cid);
+            else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
+            
+            if (!target) return;
+            const n = prompt("修正", target.text);
+            if (n && n.trim()) { target.text = n.trim(); updateFirebase(); }
+        }
+
+        function deleteItem(pid, type, cid, gid) {
+            if (!confirm("削除しますか？")) return;
+            const pin = appData.pins.find(p => p.id === pid);
+            if (type === 'main') { pin.mainComment = null; pin.children = []; }
+            else if (type === 'child') pin.children = pin.children.filter(c => c.id !== cid);
+            else pin.children.find(c => c.id === cid).grandchildren = pin.children.find(c => c.id === cid).grandchildren.filter(g => g.id !== gid);
+            updateFirebase();
+        }
+
+        function saveJSON() {
+            const blob = new Blob([JSON.stringify(appData)], {type: "application/json"});
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `backup_${Date.now()}.json`;
+            a.click();
+        }
+
+        function loadJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    appData = JSON.parse(e.target.result);
+                    updateFirebase();
+                    alert("読込成功。同期されました。");
+                } catch { alert("失敗"); }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
