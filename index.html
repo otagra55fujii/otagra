@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (バグ完全修正版)</title>
+    <title>画像マッピングコメント機能 (ルーム機能実装版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -47,6 +47,7 @@
         input[type="file"] { display: none; }
         .hidden { display: none !important; }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
+        #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
     </style>
 </head>
@@ -59,6 +60,7 @@
                 管理者: ADMIN123 / 参加者: USER1234
             </p>
             <input type="text" id="login-name" placeholder="表示名" required>
+            <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A, room101)" required>
             <input type="text" id="login-code" placeholder="招待コード(半角8文字)" maxlength="8" required>
             <button onclick="login()">ログイン</button>
         </div>
@@ -81,6 +83,7 @@
         <div id="footer">
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
+                <span id="room-display"></span>
                 <span id="user-display"></span>
             </div>
             <label id="btn-load-img" class="hidden">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
@@ -105,6 +108,7 @@
         const db = firebase.database();
 
         let currentUser = { name: "", role: "" }; 
+        let currentRoom = "default";
         let appData = { imageSrc: "", pins: [] };
         let activePinId = null;
 
@@ -113,15 +117,25 @@
 
         function login() {
             const name = document.getElementById('login-name').value.trim();
+            const room = document.getElementById('login-room').value.trim();
             const code = document.getElementById('login-code').value.trim();
-            if (!name || code.length !== 8) return alert("入力に不備があります。");
+            
+            if (!name || !room || code.length !== 8) return alert("入力に不備があります。");
+
+            // Firebaseのキーとして禁止されている記号を弾く安全装置
+            if (/[\.\$\#\[\]\/]/.test(room)) {
+                return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
+            }
 
             if (code === ADMIN_CODE) currentUser = { name, role: 'admin' };
             else if (code === USER_CODE) currentUser = { name, role: 'user' };
             else return alert("無効なコードです。");
 
+            currentRoom = room;
+
             const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
             document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
+            document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
 
             if (currentUser.role === 'admin') document.getElementById('btn-load-img').classList.remove('hidden');
             document.getElementById('login-screen').style.display = 'none';
@@ -130,11 +144,11 @@
         }
 
         function startListening() {
-            db.ref('appData').on('value', (snapshot) => {
+            // 指定された部屋名のフォルダ配下をリアルタイムリッスン
+            db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
                 appData = data || { imageSrc: "", pins: [] };
                 
-                // Firebase特有のオブジェクト化現象を徹底的に配列へシリアライズする安全装置
                 if (appData.pins) {
                     if (!Array.isArray(appData.pins)) {
                         appData.pins = Object.values(appData.pins);
@@ -164,7 +178,8 @@
         }
 
         function updateFirebase() {
-            db.ref('appData').set(appData);
+            // 指定された部屋名のフォルダへ保存
+            db.ref('rooms/' + currentRoom).set(appData);
         }
 
         function loadImage(event) {
@@ -205,7 +220,13 @@
 
         function renderApp() {
             const imgEl = document.getElementById('main-image');
-            if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; }
+            if (appData.imageSrc) { 
+                imgEl.src = appData.imageSrc; 
+                imgEl.style.display = 'block'; 
+            } else {
+                imgEl.style.display = 'none';
+                imgEl.src = "";
+            }
             const container = document.getElementById('pins-container');
             container.innerHTML = '';
             appData.pins.forEach(pin => {
@@ -317,7 +338,7 @@
             const blob = new Blob([JSON.stringify(appData)], {type: "application/json"});
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `backup_${Date.now()}.json`;
+            a.download = `backup_${currentRoom}_${Date.now()}.json`;
             a.click();
         }
 
@@ -329,7 +350,7 @@
                 try {
                     appData = JSON.parse(e.target.result);
                     updateFirebase();
-                    alert("読込成功。同期されました。");
+                    alert("読込成功。現在の部屋に同期されました。");
                 } catch { alert("失敗"); }
             };
             reader.readAsText(file);
