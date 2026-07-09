@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ロック＆ピン削除＆誤操作防止版)</title>
+    <title>画像マッピングコメント機能 (招待コード動的生成版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -48,6 +48,7 @@
         .hidden { display: none !important; }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
+        #container-admin-code { background: rgba(255,255,255,0.25); color: #FFF; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; border: 1px dashed #FFF; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
     </style>
@@ -58,11 +59,11 @@
         <div class="login-box">
             <h3>ログイン</h3>
             <p style="font-size: 11px; color: #666; text-align: left;">
-                管理者: ADMIN123 / 参加者: USER1234
+                管理者: ADMIN123 / 参加者: 各部屋の招待コード(初期値1234)
             </p>
             <input type="text" id="login-name" placeholder="表示名" required>
             <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A, room101)" required>
-            <input type="text" id="login-code" placeholder="招待コード(半角8文字)" maxlength="8" required>
+            <input type="text" id="login-code" placeholder="招待コード" maxlength="8" required>
             <button onclick="login()">ログイン</button>
         </div>
     </div>
@@ -85,6 +86,7 @@
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
                 <span id="room-display"></span>
+                <span id="container-admin-code" class="hidden">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:white; cursor:pointer; font-size:10px; padding:0 2px;">🔄変更</button></span>
                 <span id="lock-status-display"></span>
                 <span id="user-display"></span>
             </div>
@@ -112,58 +114,72 @@
 
         let currentUser = { name: "", role: "" }; 
         let currentRoom = "default";
-        let appData = { imageSrc: "", pins: [], locked: false };
+        let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
         let activePinId = null;
 
         const ADMIN_CODE = "ADMIN123";
-        const USER_CODE = "USER1234";
 
         function login() {
             const name = document.getElementById('login-name').value.trim();
             const room = document.getElementById('login-room').value.trim();
             const code = document.getElementById('login-code').value.trim();
             
-            if (!name || !room || code.length !== 8) return alert("入力に不備があります。");
+            if (!name || !room || !code) return alert("入力に不備があります。");
 
             if (/[\.\$\#\[\]\/]/.test(room)) {
                 return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
             }
 
-            if (code === ADMIN_CODE) currentUser = { name, role: 'admin' };
-            else if (code === USER_CODE) currentUser = { name, role: 'user' };
-            else return alert("無効なコードです。");
-
             currentRoom = room;
 
-            const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
-            document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
-            document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
+            // 認証強化：Firebaseから該当部屋のデータを1回だけ先行取得してコードチェック
+            db.ref('rooms/' + currentRoom).once('value').then((snapshot) => {
+                const data = snapshot.val() || {};
+                const savedInviteCode = data.inviteCode || "1234"; // 部屋が完全に新規の場合はデフォルト1234
 
-            if (currentUser.role === 'admin') {
-                document.getElementById('btn-load-img').classList.remove('hidden');
-                document.getElementById('btn-lock-toggle').classList.remove('hidden');
-            }
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('main-screen').style.display = 'flex';
+                if (code === ADMIN_CODE) {
+                    currentUser = { name, role: 'admin' };
+                } else if (code === savedInviteCode) {
+                    currentUser = { name, role: 'user' };
+                } else {
+                    return alert("無効なコードです。部屋名または招待コードが間違っています。");
+                }
 
-            // 誤操作による再読み込み（リロード）引き留め線を張る
-            window.addEventListener('beforeunload', preventRowReload);
+                // ログイン成功後のUIセットアップ
+                const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
+                document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
+                document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
 
-            startListening();
+                if (currentUser.role === 'admin') {
+                    document.getElementById('btn-load-img').classList.remove('hidden');
+                    document.getElementById('btn-lock-toggle').classList.remove('hidden');
+                    document.getElementById('container-admin-code').classList.remove('hidden');
+                }
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-screen').style.display = 'flex';
+
+                // 誤操作による再読み込み（リロード）引き留め線
+                window.addEventListener('beforeunload', preventRowReload);
+
+                startListening();
+            }).catch((error) => {
+                alert("通信エラーが発生しました。接続を確認してください。");
+                console.error(error);
+            });
         }
 
-        // リロード警告イベントハンドラ
         function preventRowReload(e) {
             e.preventDefault();
-            e.returnValue = ''; // ブラウザ標準の警告ダイアログを表示
+            e.returnValue = ''; 
         }
 
         function startListening() {
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
-                appData = data || { imageSrc: "", pins: [], locked: false };
+                appData = data || { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
                 
                 if (appData.locked === undefined) appData.locked = false;
+                if (appData.inviteCode === undefined) appData.inviteCode = "1234";
 
                 if (appData.pins) {
                     if (!Array.isArray(appData.pins)) {
@@ -190,7 +206,6 @@
                 document.getElementById('status-text').innerText = "● リアルタイム同期中";
                 document.getElementById('sync-status').style.color = "#4CAF50";
                 
-                // ロック状態のUI更新
                 updateLockUI();
                 renderApp();
             });
@@ -199,7 +214,9 @@
         function updateLockUI() {
             const lockDisplay = document.getElementById('lock-status-display');
             const lockBtn = document.getElementById('btn-lock-toggle');
+            const codeDisplay = document.getElementById('invite-code-display');
             
+            // ロックUI更新
             if (appData.locked) {
                 lockDisplay.innerText = "🔒 閲覧専用(ロック)";
                 lockDisplay.style.backgroundColor = "var(--danger)";
@@ -208,6 +225,21 @@
                 lockDisplay.innerText = "🔓 編集可能";
                 lockDisplay.style.backgroundColor = "var(--primary)";
                 if (lockBtn) lockBtn.innerText = "🔒 部屋をロック";
+            }
+
+            // 管理者用招待コード表示更新
+            if (codeDisplay) {
+                codeDisplay.innerText = appData.inviteCode;
+            }
+        }
+
+        // 管理者専用：使い捨て招待コードの4桁ランダム生成
+        function generateInviteCode() {
+            if (currentUser.role !== 'admin') return;
+            const newCode = Math.floor(1000 + Math.random() * 9000).toString(); // 1000〜9999のランダム数字
+            if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？\n変更すると、古いコードを使っている参加者は次回ログインできなくなります。`)) {
+                appData.inviteCode = newCode;
+                updateFirebase();
             }
         }
 
@@ -246,7 +278,6 @@
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc) return;
             
-            // 参加者かつロック中の場合はピン立てを禁止
             if (currentUser.role !== 'admin' && appData.locked) {
                 alert("この部屋は現在ロックされているため、新しくピンを立てることはできません。");
                 return;
@@ -290,7 +321,6 @@
             const pin = appData.pins.find(p => p.id === activePinId);
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666;">ピンを選択してください</p>'; return; }
             
-            // ピンの見出しエリアに管理者用の削除ボタンを追加
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <h3 style="margin:0;">No.${pin.number}</h3>`;
             if (currentUser.role === 'admin') {
@@ -298,7 +328,6 @@
             }
             html += `</div>`;
 
-            // 参加者画面でロック中の場合、警告バナーを表示
             if (currentUser.role !== 'admin' && appData.locked) {
                 html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 ワークショップ終了のため閲覧専用モードになっています。</p>`;
             }
@@ -336,7 +365,6 @@
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
             
-            // ロック中、一般参加者は自分のコメントであっても修正・削除を不可にする判定
             const canEdit = (currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked);
 
             const editBtn = canEdit ? 
@@ -383,18 +411,12 @@
             updateFirebase();
         }
 
-        // 管理者専用：ピンそのものを削除する機能
         function deletePin(pid) {
             if (!confirm("このピンと、付随するすべてのコメントを完全に削除しますか？")) return;
-            
-            // 該当ピンを削除
             appData.pins = appData.pins.filter(p => p.id !== pid);
-            
-            // 残ったピンの番号を1から綺麗に再ナンバリング（歯抜け防止）
             appData.pins.forEach((p, idx) => {
                 p.number = idx + 1;
             });
-            
             activePinId = null;
             updateFirebase();
         }
