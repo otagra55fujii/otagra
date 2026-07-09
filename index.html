@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (データガード＆レイアウト修正版)</title>
+    <title>画像マッピングコメント機能 (レイアウトすっきり版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -27,8 +27,8 @@
         .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
-        /* コメントエリア（フッター拡大に伴い、底の余白を150pxに拡張してスクロールを確保） */
-        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 150px; }
+        /* コメントエリア（極薄フッターに合わせて、底の余白を50pxに最適化してコメント欄を最大化） */
+        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 50px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
         .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
@@ -41,21 +41,21 @@
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
-        /* フッター：構造を2層・3層に整理し、スマホでのボタン隠れを完全に防止 */
-        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 10px; display: flex; flex-direction: column; z-index: 100; gap: 6px; }
-        #footer button, #footer label { background: white; color: #333; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
-        input[type="file"] { display: none; }
-        .hidden { display: none !important; }
-        
-        #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 2px; }
+        /* 新・固定フッター：ステータス表示のみにして極限まで薄く（1行で画面を圧迫しない） */
+        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 8px 12px; display: flex; flex-direction: column; z-index: 100; }
+        #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
         
-        /* 管理者専用ツールバーの帯 */
-        #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 5px; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.1); padding: 6px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2); }
-        #container-admin-code { color: #FFF; font-size: 11px; font-weight: bold; }
-        #btn-load-json { background: #FF9800 !important; color: white !important; }
+        /* コメント欄の下に引っ越したボタン用のデザイン（白背景に馴染むように調整） */
+        .action-btn { background: white; color: #333; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; align-items: center; background: #f5f5f5; padding: 10px; border-radius: 6px; border: 1px dashed #ccc; margin-bottom: 10px; }
+        #container-admin-code { color: #333; font-size: 12px; font-weight: bold; width: 100%; margin-bottom: 4px; }
+        #btn-load-json { background: #FF9800 !important; color: white !important; border: none !important; }
+        
+        input[type="file"] { display: none; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -81,33 +81,38 @@
             </div>
         </div>
 
+        <!-- コメントエリア：この枠全体がスクロールします -->
         <div id="comment-area">
+            <!-- リアルタイムに書き換わるコメント本文 -->
             <div id="comment-content">
                 <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
             </div>
+            
+            <!-- コメントの下にドッキングした操作ボタンエリア（一緒にスクロールする） -->
+            <div id="scroll-action-area" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border);">
+                <!-- 管理者専用ツールバー（一般参加者には丸ごと非表示） -->
+                <div id="admin-toolbar" class="hidden">
+                    <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
+                    <button id="btn-lock-toggle" class="action-btn" onclick="toggleLock()">🔒 部屋をロック</button>
+                    <label class="action-btn">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
+                    <label id="btn-load-json" class="action-btn">データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+                </div>
+
+                <!-- 共通ボタン（コメントの下に常駐。スクロールでいつでもアクセス可能） -->
+                <div style="width: 100%; display: flex; gap: 6px; justify-content: space-between;">
+                    <button onclick="saveJSON()" style="flex: 1; background: #2196F3; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">📥 結果を自分の端末に保存(JSON)</button>
+                    <button onclick="logout()" style="background: #555; color: white; padding: 10px 16px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室</button>
+                </div>
+            </div>
         </div>
 
+        <!-- 画面最下部に常時固定される極薄フッター -->
         <div id="footer">
-            <!-- 1段目: ステータス表示 -->
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
                 <span id="room-display"></span>
                 <span id="lock-status-display"></span>
                 <span id="user-display"></span>
-            </div>
-            
-            <!-- 2段目: 管理者専用ツールバー（一般参加者には丸ごと非表示） -->
-            <div id="admin-toolbar" class="hidden">
-                <span id="container-admin-code">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:cyan; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px;">[🔄変更]</button></span>
-                <button id="btn-lock-toggle" onclick="toggleLock()">🔒 部屋をロック</button>
-                <label id="btn-load-img" style="background:white; color:#333; padding:6px 10px; border-radius:4px; cursor:pointer;">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
-                <label id="btn-load-json">データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
-            </div>
-
-            <!-- 3段目: 共通ボタン（絶対に隠れない最下段に大きく配置） -->
-            <div style="width: 100%; display: flex; gap: 6px; justify-content: space-between;">
-                <button onclick="saveJSON()" style="flex: 1; background: #2196F3; color: white; padding: 8px;">📥 結果を自分の端末に保存(JSON)</button>
-                <button onclick="logout()" style="background: #555; color: white; padding: 8px 16px;">🚪 退室</button>
             </div>
         </div>
     </div>
@@ -476,7 +481,6 @@
             updateFirebase();
         }
 
-        // 安全強化版：保存時に部屋名メタデータを埋め込む
         function saveJSON() {
             const outputData = {
                 roomName: currentRoom,
@@ -490,7 +494,6 @@
             a.click();
         }
 
-        // 管理者専用・データ誤爆ガード付き読込
         function loadJSON(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -499,7 +502,6 @@
                 try {
                     const json = JSON.parse(e.target.result);
                     
-                    // 部屋名メタデータが存在する場合のクロスチェック
                     if (json.roomName && json.appData) {
                         if (json.roomName !== currentRoom) {
                             const proceed = confirm(`⚠️【部屋名不一致の警告】\nこのファイルは別の部屋「${json.roomName}」のバックアップデータです。\n\n現在の部屋「${currentRoom}」に読み込むと、現在のデータがすべて上書き消去されますが、本当によろしいですか？`);
@@ -507,7 +509,6 @@
                         }
                         appData = json.appData;
                     } else {
-                        // 古い形式のJSONだった場合
                         const proceed = confirm("⚠️ 古い形式のバックアップファイルです。部屋名の確認ができませんが、現在の部屋に上書き読み込みしますか？");
                         if (!proceed) return;
                         appData = json;
