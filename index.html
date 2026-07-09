@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (スマホ最適化版)</title>
+    <title>画像マッピングコメント機能 (データガード＆レイアウト修正版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -27,8 +27,8 @@
         .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
-        /* コメントエリア（スマホのキーボード干渉を防ぐため底の余白を120pxに拡大） */
-        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 120px; }
+        /* コメントエリア（フッター拡大に伴い、底の余白を150pxに拡張してスクロールを確保） */
+        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 150px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
         .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
@@ -36,22 +36,26 @@
         .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
         .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
         
-        /* フォーム：スマホの固定フッターに隠れないよう、スマートな横並び1行構成に変更 */
+        /* フォーム */
         .add-comment-form { display: flex; flex-direction: row; gap: 5px; margin-top: 8px; align-items: center; width: 100%; }
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
-        /* フッター */
-        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 10px; display: flex; justify-content: space-around; flex-wrap: wrap; z-index: 100; gap: 5px; }
-        #footer button, #footer label { background: white; color: #333; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
-        #footer button.btn-logout { background: #555; color: white; }
+        /* フッター：構造を2層・3層に整理し、スマホでのボタン隠れを完全に防止 */
+        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 10px; display: flex; flex-direction: column; z-index: 100; gap: 6px; }
+        #footer button, #footer label { background: white; color: #333; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
         input[type="file"] { display: none; }
         .hidden { display: none !important; }
-        #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
+        
+        #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 2px; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
-        #container-admin-code { background: rgba(255,255,255,0.25); color: #FFF; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; border: 1px dashed #FFF; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+        
+        /* 管理者専用ツールバーの帯 */
+        #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 5px; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.1); padding: 6px; border-radius: 4px; border: 1px dashed rgba(255,255,255,0.2); }
+        #container-admin-code { color: #FFF; font-size: 11px; font-weight: bold; }
+        #btn-load-json { background: #FF9800 !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -84,18 +88,27 @@
         </div>
 
         <div id="footer">
+            <!-- 1段目: ステータス表示 -->
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
                 <span id="room-display"></span>
-                <span id="container-admin-code" class="hidden">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:white; cursor:pointer; font-size:10px; padding:0 2px;">🔄変更</button></span>
                 <span id="lock-status-display"></span>
                 <span id="user-display"></span>
             </div>
-            <button id="btn-lock-toggle" class="hidden" onclick="toggleLock()">🔒 部屋をロック</button>
-            <label id="btn-load-img" class="hidden">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
-            <button onclick="saveJSON()">保存(JSON)</button>
-            <label>読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
-            <button class="btn-logout" onclick="logout()">退室</button>
+            
+            <!-- 2段目: 管理者専用ツールバー（一般参加者には丸ごと非表示） -->
+            <div id="admin-toolbar" class="hidden">
+                <span id="container-admin-code">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:cyan; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px;">[🔄変更]</button></span>
+                <button id="btn-lock-toggle" onclick="toggleLock()">🔒 部屋をロック</button>
+                <label id="btn-load-img" style="background:white; color:#333; padding:6px 10px; border-radius:4px; cursor:pointer;">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
+                <label id="btn-load-json">データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+            </div>
+
+            <!-- 3段目: 共通ボタン（絶対に隠れない最下段に大きく配置） -->
+            <div style="width: 100%; display: flex; gap: 6px; justify-content: space-between;">
+                <button onclick="saveJSON()" style="flex: 1; background: #2196F3; color: white; padding: 8px;">📥 結果を自分の端末に保存(JSON)</button>
+                <button onclick="logout()" style="background: #555; color: white; padding: 8px 16px;">🚪 退室</button>
+            </div>
         </div>
     </div>
 
@@ -121,7 +134,6 @@
 
         const ADMIN_CODE = "ADMIN123";
 
-        // ページ読み込み時に自動復旧（再ログイン）をチェック
         window.addEventListener('DOMContentLoaded', () => {
             const savedSession = sessionStorage.getItem('vmc_session');
             if (savedSession) {
@@ -130,7 +142,7 @@
                     document.getElementById('login-name').value = session.name;
                     document.getElementById('login-room').value = session.room;
                     document.getElementById('login-code').value = session.code;
-                    login(true); // 自動ログイン実行
+                    login(true);
                 } catch (e) {
                     sessionStorage.removeItem('vmc_session');
                 }
@@ -163,22 +175,20 @@
                     return alert("無効なコードです。部屋名または招待コードが間違っています。");
                 }
 
-                // ログイン成功時にセッション情報をブラウザに記憶（リロード対策）
                 sessionStorage.setItem('vmc_session', JSON.stringify({ name, room, code }));
 
                 const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
                 document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
                 document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
 
+                // 管理者なら専用ツールバーを表示
                 if (currentUser.role === 'admin') {
-                    document.getElementById('btn-load-img').classList.remove('hidden');
-                    document.getElementById('btn-lock-toggle').classList.remove('hidden');
-                    document.getElementById('container-admin-code').classList.remove('hidden');
+                    document.getElementById('admin-toolbar').classList.remove('hidden');
                 }
+                
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('main-screen').style.display = 'flex';
 
-                // PC用の念のための引き留め線
                 window.addEventListener('beforeunload', preventRowReload);
 
                 startListening();
@@ -244,11 +254,11 @@
             const codeDisplay = document.getElementById('invite-code-display');
             
             if (appData.locked) {
-                lockDisplay.innerText = "🔒 閲覧専用(ロック)";
+                lockDisplay.innerText = "🔒 ロック中";
                 lockDisplay.style.backgroundColor = "var(--danger)";
                 if (lockBtn) lockBtn.innerText = "🔓 ロック解除";
             } else {
-                lockDisplay.innerText = "🔓 編集可能";
+                lockDisplay.innerText = "🔓 編集可";
                 lockDisplay.style.backgroundColor = "var(--primary)";
                 if (lockBtn) lockBtn.innerText = "🔒 部屋をロック";
             }
@@ -466,24 +476,48 @@
             updateFirebase();
         }
 
+        // 安全強化版：保存時に部屋名メタデータを埋め込む
         function saveJSON() {
-            const blob = new Blob([JSON.stringify(appData)], {type: "application/json"});
+            const outputData = {
+                roomName: currentRoom,
+                exportedAt: new Date().toLocaleString(),
+                appData: appData
+            };
+            const blob = new Blob([JSON.stringify(outputData)], {type: "application/json"});
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
             a.download = `backup_${currentRoom}_${Date.now()}.json`;
             a.click();
         }
 
+        // 管理者専用・データ誤爆ガード付き読込
         function loadJSON(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    appData = JSON.parse(e.target.result);
+                    const json = JSON.parse(e.target.result);
+                    
+                    // 部屋名メタデータが存在する場合のクロスチェック
+                    if (json.roomName && json.appData) {
+                        if (json.roomName !== currentRoom) {
+                            const proceed = confirm(`⚠️【部屋名不一致の警告】\nこのファイルは別の部屋「${json.roomName}」のバックアップデータです。\n\n現在の部屋「${currentRoom}」に読み込むと、現在のデータがすべて上書き消去されますが、本当によろしいですか？`);
+                            if (!proceed) return;
+                        }
+                        appData = json.appData;
+                    } else {
+                        // 古い形式のJSONだった場合
+                        const proceed = confirm("⚠️ 古い形式のバックアップファイルです。部屋名の確認ができませんが、現在の部屋に上書き読み込みしますか？");
+                        if (!proceed) return;
+                        appData = json;
+                    }
+                    
                     updateFirebase();
-                    alert("読込成功。現在の部屋に同期されました。");
-                } catch { alert("失敗"); }
+                    alert("データの読み込みが完了し、現在の部屋に同期されました。");
+                } catch (err) { 
+                    alert("読み込みに失敗しました。正しいJSONファイルか確認してください。"); 
+                }
             };
             reader.readAsText(file);
         }
