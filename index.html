@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (招待コード動的生成版)</title>
+    <title>画像マッピングコメント機能 (スマホ最適化版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -27,8 +27,8 @@
         .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
-        /* コメント */
-        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 70px; }
+        /* コメントエリア（スマホのキーボード干渉を防ぐため底の余白を120pxに拡大） */
+        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 120px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
         .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
@@ -36,14 +36,15 @@
         .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
         .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
         
-        /* フォーム */
-        .add-comment-form { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-        .add-comment-form textarea { width: 100%; resize: vertical; padding: 5px; border: 1px solid var(--border); }
-        .add-comment-form button { align-self: flex-end; padding: 5px 15px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; }
+        /* フォーム：スマホの固定フッターに隠れないよう、スマートな横並び1行構成に変更 */
+        .add-comment-form { display: flex; flex-direction: row; gap: 5px; margin-top: 8px; align-items: center; width: 100%; }
+        .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
+        .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
         /* フッター */
         #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 10px; display: flex; justify-content: space-around; flex-wrap: wrap; z-index: 100; gap: 5px; }
         #footer button, #footer label { background: white; color: #333; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        #footer button.btn-logout { background: #555; color: white; }
         input[type="file"] { display: none; }
         .hidden { display: none !important; }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
@@ -94,6 +95,7 @@
             <label id="btn-load-img" class="hidden">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
             <button onclick="saveJSON()">保存(JSON)</button>
             <label>読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+            <button class="btn-logout" onclick="logout()">退室</button>
         </div>
     </div>
 
@@ -119,7 +121,23 @@
 
         const ADMIN_CODE = "ADMIN123";
 
-        function login() {
+        // ページ読み込み時に自動復旧（再ログイン）をチェック
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedSession = sessionStorage.getItem('vmc_session');
+            if (savedSession) {
+                try {
+                    const session = JSON.parse(savedSession);
+                    document.getElementById('login-name').value = session.name;
+                    document.getElementById('login-room').value = session.room;
+                    document.getElementById('login-code').value = session.code;
+                    login(true); // 自動ログイン実行
+                } catch (e) {
+                    sessionStorage.removeItem('vmc_session');
+                }
+            }
+        });
+
+        function login(isAutoRun = false) {
             const name = document.getElementById('login-name').value.trim();
             const room = document.getElementById('login-room').value.trim();
             const code = document.getElementById('login-code').value.trim();
@@ -132,20 +150,22 @@
 
             currentRoom = room;
 
-            // 認証強化：Firebaseから該当部屋のデータを1回だけ先行取得してコードチェック
             db.ref('rooms/' + currentRoom).once('value').then((snapshot) => {
                 const data = snapshot.val() || {};
-                const savedInviteCode = data.inviteCode || "1234"; // 部屋が完全に新規の場合はデフォルト1234
+                const savedInviteCode = data.inviteCode || "1234";
 
                 if (code === ADMIN_CODE) {
                     currentUser = { name, role: 'admin' };
                 } else if (code === savedInviteCode) {
                     currentUser = { name, role: 'user' };
                 } else {
+                    sessionStorage.removeItem('vmc_session');
                     return alert("無効なコードです。部屋名または招待コードが間違っています。");
                 }
 
-                // ログイン成功後のUIセットアップ
+                // ログイン成功時にセッション情報をブラウザに記憶（リロード対策）
+                sessionStorage.setItem('vmc_session', JSON.stringify({ name, room, code }));
+
                 const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
                 document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
                 document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
@@ -158,12 +178,12 @@
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('main-screen').style.display = 'flex';
 
-                // 誤操作による再読み込み（リロード）引き留め線
+                // PC用の念のための引き留め線
                 window.addEventListener('beforeunload', preventRowReload);
 
                 startListening();
             }).catch((error) => {
-                alert("通信エラーが発生しました。接続を確認してください。");
+                if(!isAutoRun) alert("通信エラーが発生しました。接続を確認してください。");
                 console.error(error);
             });
         }
@@ -171,6 +191,13 @@
         function preventRowReload(e) {
             e.preventDefault();
             e.returnValue = ''; 
+        }
+
+        function logout() {
+            if (confirm("部屋を退室してログイン画面に戻りますか？")) {
+                sessionStorage.removeItem('vmc_session');
+                location.reload();
+            }
         }
 
         function startListening() {
@@ -216,7 +243,6 @@
             const lockBtn = document.getElementById('btn-lock-toggle');
             const codeDisplay = document.getElementById('invite-code-display');
             
-            // ロックUI更新
             if (appData.locked) {
                 lockDisplay.innerText = "🔒 閲覧専用(ロック)";
                 lockDisplay.style.backgroundColor = "var(--danger)";
@@ -227,16 +253,14 @@
                 if (lockBtn) lockBtn.innerText = "🔒 部屋をロック";
             }
 
-            // 管理者用招待コード表示更新
             if (codeDisplay) {
                 codeDisplay.innerText = appData.inviteCode;
             }
         }
 
-        // 管理者専用：使い捨て招待コードの4桁ランダム生成
         function generateInviteCode() {
             if (currentUser.role !== 'admin') return;
-            const newCode = Math.floor(1000 + Math.random() * 9000).toString(); // 1000〜9999のランダム数字
+            const newCode = Math.floor(1000 + Math.random() * 9000).toString();
             if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？\n変更すると、古いコードを使っている参加者は次回ログインできなくなります。`)) {
                 appData.inviteCode = newCode;
                 updateFirebase();
@@ -329,14 +353,14 @@
             html += `</div>`;
 
             if (currentUser.role !== 'admin' && appData.locked) {
-                html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 ワークショップ終了のため閲覧専用モードになっています。</p>`;
+                html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 閲覧専用(ロック)</p>`;
             }
 
             if (!pin.mainComment) {
                 if (currentUser.role === 'admin' || !appData.locked) {
                     html += createForm('main', pin.id, null);
                 } else {
-                    html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません（ロック中）</p>`;
+                    html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません</p>`;
                 }
             } else {
                 html += renderItem(pin.mainComment, 'main', pin.id, null, null);
@@ -382,7 +406,7 @@
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
             
-            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" rows="2"></textarea>
+            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" placeholder="コメントを入力..."></textarea>
                     <button onclick="addItem(${btnArgs})">投稿</button></div>`;
         }
 
