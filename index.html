@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (レイアウトすっきり版)</title>
+    <title>画像マッピングコメント機能 (フッター完全スリム版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -19,16 +19,17 @@
         .login-box input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid var(--border); border-radius: 4px; }
         .login-box button { width: 100%; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; }
         
-        /* メイン */
+        /* メイン画面レイアウト */
         #main-screen { display: none; flex-direction: column; height: 100%; }
         #image-area { flex: 1; overflow: auto; position: relative; background: #e0e0e0; border-bottom: 2px solid var(--border); }
         #image-container { position: relative; display: inline-block; transform-origin: top left; }
         #main-image { max-width: none; display: block; }
+        
         .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
-        /* コメントエリア（極薄フッターに合わせて、底の余白を50pxに最適化してコメント欄を最大化） */
-        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px; padding-bottom: 50px; }
+        /* コメントエリア（ここ自体が独立してスクロールする。最下部にボタン群を内包） */
+        #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px 15px 50px 15px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
         .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
@@ -36,23 +37,22 @@
         .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
         .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
         
-        /* フォーム */
+        /* 投稿フォーム */
         .add-comment-form { display: flex; flex-direction: row; gap: 5px; margin-top: 8px; align-items: center; width: 100%; }
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
-        /* 新・固定フッター：ステータス表示のみにして極限まで薄く（1行で画面を圧迫しない） */
-        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #333; padding: 8px 12px; display: flex; flex-direction: column; z-index: 100; }
+        /* 【大改造】画面最下部に常時固定される、ボタン無しの「超極薄ステータスバー」 */
+        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #222; padding: 6px 12px; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
         
-        /* コメント欄の下に引っ越したボタン用のデザイン（白背景に馴染むように調整） */
-        .action-btn { background: white; color: #333; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
-        #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; align-items: center; background: #f5f5f5; padding: 10px; border-radius: 6px; border: 1px dashed #ccc; margin-bottom: 10px; }
+        /* 白背景のコメント欄の下に引っ越した、新しいデザインのボタン群 */
+        .action-btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; text-align: center; }
+        #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; align-items: center; background: #f5f5f5; padding: 12px; border-radius: 6px; border: 1px dashed #ccc; margin-bottom: 12px; }
         #container-admin-code { color: #333; font-size: 12px; font-weight: bold; width: 100%; margin-bottom: 4px; }
-        #btn-load-json { background: #FF9800 !important; color: white !important; border: none !important; }
         
         input[type="file"] { display: none; }
         .hidden { display: none !important; }
@@ -60,6 +60,7 @@
 </head>
 <body>
 
+    <!-- ログイン画面 -->
     <div id="login-screen">
         <div class="login-box">
             <h3>ログイン</h3>
@@ -67,13 +68,15 @@
                 管理者: ADMIN123 / 参加者: 各部屋の招待コード(初期値1234)
             </p>
             <input type="text" id="login-name" placeholder="表示名" required>
-            <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A, room101)" required>
+            <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A)" required>
             <input type="text" id="login-code" placeholder="招待コード" maxlength="8" required>
             <button onclick="login()">ログイン</button>
         </div>
     </div>
 
+    <!-- メイン画面 -->
     <div id="main-screen">
+        <!-- 上半分：画像エリア -->
         <div id="image-area">
             <div id="image-container">
                 <img id="main-image" src="" style="display:none;">
@@ -81,32 +84,33 @@
             </div>
         </div>
 
-        <!-- コメントエリア：この枠全体がスクロールします -->
+        <!-- 下半分：コメントエリア（このエリア自体が独立してスクロールします） -->
         <div id="comment-area">
-            <!-- リアルタイムに書き換わるコメント本文 -->
+            <!-- リアルタイムに書き換わるコメント本文エリア -->
             <div id="comment-content">
                 <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
             </div>
             
-            <!-- コメントの下にドッキングした操作ボタンエリア（一緒にスクロールする） -->
-            <div id="scroll-action-area" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border);">
-                <!-- 管理者専用ツールバー（一般参加者には丸ごと非表示） -->
+            <!-- 【注目】コメントの下に完全に埋め込まれた操作ボタンエリア（スクロールすると出現） -->
+            <div id="scroll-action-area" style="margin-top: 30px; padding-top: 15px; border-top: 2px dashed #eee;">
+                
+                <!-- 管理者専用ツールバー（一般参加者には丸ごと非表示、白背景用の新デザイン） -->
                 <div id="admin-toolbar" class="hidden">
-                    <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
-                    <button id="btn-lock-toggle" class="action-btn" onclick="toggleLock()">🔒 部屋をロック</button>
-                    <label class="action-btn">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
-                    <label id="btn-load-json" class="action-btn">データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+                    <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
+                    <button id="btn-lock-toggle" class="action-btn" style="background:#616161; color:white;" onclick="toggleLock()">🔒 部屋をロック</button>
+                    <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
+                    <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
                 </div>
 
-                <!-- 共通ボタン（コメントの下に常駐。スクロールでいつでもアクセス可能） -->
+                <!-- 全員共通ボタン（コメントの下に常駐。スクロールでアクセス可能） -->
                 <div style="width: 100%; display: flex; gap: 6px; justify-content: space-between;">
-                    <button onclick="saveJSON()" style="flex: 1; background: #2196F3; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">📥 結果を自分の端末に保存(JSON)</button>
-                    <button onclick="logout()" style="background: #555; color: white; padding: 10px 16px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室</button>
+                    <button onclick="saveJSON()" style="flex: 3; background: #2196F3; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">📥 結果を自分の端末に保存(JSON)</button>
+                    <button onclick="logout()" style="flex: 1; background: #757575; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室</button>
                 </div>
             </div>
         </div>
 
-        <!-- 画面最下部に常時固定される極薄フッター -->
+        <!-- 【常時固定】極薄ステータスバー（文字の表示のみ、ボタンは一切配置しない） -->
         <div id="footer">
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
@@ -186,7 +190,6 @@
                 document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
                 document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
 
-                // 管理者なら専用ツールバーを表示
                 if (currentUser.role === 'admin') {
                     document.getElementById('admin-toolbar').classList.remove('hidden');
                 }
@@ -276,7 +279,7 @@
         function generateInviteCode() {
             if (currentUser.role !== 'admin') return;
             const newCode = Math.floor(1000 + Math.random() * 9000).toString();
-            if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？\n変更すると、古いコードを使っている参加者は次回ログインできなくなります。`)) {
+            if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？`)) {
                 appData.inviteCode = newCode;
                 updateFirebase();
             }
@@ -501,23 +504,21 @@
             reader.onload = (e) => {
                 try {
                     const json = JSON.parse(e.target.result);
-                    
                     if (json.roomName && json.appData) {
                         if (json.roomName !== currentRoom) {
-                            const proceed = confirm(`⚠️【部屋名不一致の警告】\nこのファイルは別の部屋「${json.roomName}」のバックアップデータです。\n\n現在の部屋「${currentRoom}」に読み込むと、現在のデータがすべて上書き消去されますが、本当によろしいですか？`);
+                            const proceed = confirm(`⚠️【部屋名不一致の警告】\nこのファイルは別の部屋「${json.roomName}」のデータです。\n上書き消去されますが、本当によろしいですか？`);
                             if (!proceed) return;
                         }
                         appData = json.appData;
                     } else {
-                        const proceed = confirm("⚠️ 古い形式のバックアップファイルです。部屋名の確認ができませんが、現在の部屋に上書き読み込みしますか？");
+                        const proceed = confirm("⚠️ 古い形式のファイルです。上書き読み込みしますか？");
                         if (!proceed) return;
                         appData = json;
                     }
-                    
                     updateFirebase();
-                    alert("データの読み込みが完了し、現在の部屋に同期されました。");
+                    alert("データの読み込みが完了しました。");
                 } catch (err) { 
-                    alert("読み込みに失敗しました。正しいJSONファイルか確認してください。"); 
+                    alert("読み込みに失敗しました。"); 
                 }
             };
             reader.readAsText(file);
