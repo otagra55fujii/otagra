@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ルーム機能実装版)</title>
+    <title>画像マッピングコメント機能 (ロック＆ピン削除＆誤操作防止版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -48,6 +48,7 @@
         .hidden { display: none !important; }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; padding: 0 5px; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
+        #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
     </style>
 </head>
@@ -84,8 +85,10 @@
             <div id="sync-status">
                 <span id="status-text">● 同期待機中</span>
                 <span id="room-display"></span>
+                <span id="lock-status-display"></span>
                 <span id="user-display"></span>
             </div>
+            <button id="btn-lock-toggle" class="hidden" onclick="toggleLock()">🔒 部屋をロック</button>
             <label id="btn-load-img" class="hidden">画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
             <button onclick="saveJSON()">保存(JSON)</button>
             <label>読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
@@ -109,7 +112,7 @@
 
         let currentUser = { name: "", role: "" }; 
         let currentRoom = "default";
-        let appData = { imageSrc: "", pins: [] };
+        let appData = { imageSrc: "", pins: [], locked: false };
         let activePinId = null;
 
         const ADMIN_CODE = "ADMIN123";
@@ -122,7 +125,6 @@
             
             if (!name || !room || code.length !== 8) return alert("入力に不備があります。");
 
-            // Firebaseのキーとして禁止されている記号を弾く安全装置
             if (/[\.\$\#\[\]\/]/.test(room)) {
                 return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
             }
@@ -137,18 +139,32 @@
             document.getElementById('user-display').innerText = `👤 ${currentUser.name} (${roleText})`;
             document.getElementById('room-display').innerText = `🏠 部屋: ${currentRoom}`;
 
-            if (currentUser.role === 'admin') document.getElementById('btn-load-img').classList.remove('hidden');
+            if (currentUser.role === 'admin') {
+                document.getElementById('btn-load-img').classList.remove('hidden');
+                document.getElementById('btn-lock-toggle').classList.remove('hidden');
+            }
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-screen').style.display = 'flex';
+
+            // 誤操作による再読み込み（リロード）引き留め線を張る
+            window.addEventListener('beforeunload', preventRowReload);
+
             startListening();
         }
 
+        // リロード警告イベントハンドラ
+        function preventRowReload(e) {
+            e.preventDefault();
+            e.returnValue = ''; // ブラウザ標準の警告ダイアログを表示
+        }
+
         function startListening() {
-            // 指定された部屋名のフォルダ配下をリアルタイムリッスン
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
-                appData = data || { imageSrc: "", pins: [] };
+                appData = data || { imageSrc: "", pins: [], locked: false };
                 
+                if (appData.locked === undefined) appData.locked = false;
+
                 if (appData.pins) {
                     if (!Array.isArray(appData.pins)) {
                         appData.pins = Object.values(appData.pins);
@@ -173,12 +189,34 @@
 
                 document.getElementById('status-text').innerText = "● リアルタイム同期中";
                 document.getElementById('sync-status').style.color = "#4CAF50";
+                
+                // ロック状態のUI更新
+                updateLockUI();
                 renderApp();
             });
         }
 
+        function updateLockUI() {
+            const lockDisplay = document.getElementById('lock-status-display');
+            const lockBtn = document.getElementById('btn-lock-toggle');
+            
+            if (appData.locked) {
+                lockDisplay.innerText = "🔒 閲覧専用(ロック)";
+                lockDisplay.style.backgroundColor = "var(--danger)";
+                if (lockBtn) lockBtn.innerText = "🔓 ロック解除";
+            } else {
+                lockDisplay.innerText = "🔓 編集可能";
+                lockDisplay.style.backgroundColor = "var(--primary)";
+                if (lockBtn) lockBtn.innerText = "🔒 部屋をロック";
+            }
+        }
+
+        function toggleLock() {
+            appData.locked = !appData.locked;
+            updateFirebase();
+        }
+
         function updateFirebase() {
-            // 指定された部屋名のフォルダへ保存
             db.ref('rooms/' + currentRoom).set(appData);
         }
 
@@ -207,6 +245,13 @@
 
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc) return;
+            
+            // 参加者かつロック中の場合はピン立てを禁止
+            if (currentUser.role !== 'admin' && appData.locked) {
+                alert("この部屋は現在ロックされているため、新しくピンを立てることはできません。");
+                return;
+            }
+
             const rect = this.getBoundingClientRect();
             appData.pins.push({
                 id: Date.now().toString(),
@@ -244,9 +289,26 @@
             const container = document.getElementById('comment-content');
             const pin = appData.pins.find(p => p.id === activePinId);
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666;">ピンを選択してください</p>'; return; }
-            let html = `<h3>No.${pin.number}</h3>`;
+            
+            // ピンの見出しエリアに管理者用の削除ボタンを追加
+            let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <h3 style="margin:0;">No.${pin.number}</h3>`;
+            if (currentUser.role === 'admin') {
+                html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ このピンを削除</button>`;
+            }
+            html += `</div>`;
+
+            // 参加者画面でロック中の場合、警告バナーを表示
+            if (currentUser.role !== 'admin' && appData.locked) {
+                html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 ワークショップ終了のため閲覧専用モードになっています。</p>`;
+            }
+
             if (!pin.mainComment) {
-                html += createForm('main', pin.id, null);
+                if (currentUser.role === 'admin' || !appData.locked) {
+                    html += createForm('main', pin.id, null);
+                } else {
+                    html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません（ロック中）</p>`;
+                }
             } else {
                 html += renderItem(pin.mainComment, 'main', pin.id, null, null);
                 (pin.children || []).forEach(c => {
@@ -255,12 +317,16 @@
                         html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`;
                     });
                     if (!(c.grandchildren) || c.grandchildren.length < 10) {
-                        html += createForm('grand', pin.id, c.id);
+                        if (currentUser.role === 'admin' || !appData.locked) {
+                            html += createForm('grand', pin.id, c.id);
+                        }
                     }
                     html += `</div>`;
                 });
                 if ((pin.children || []).length < 10) {
-                    html += createForm('child', pin.id, null);
+                    if (currentUser.role === 'admin' || !appData.locked) {
+                        html += createForm('child', pin.id, null);
+                    }
                 }
             }
             container.innerHTML = html;
@@ -269,7 +335,11 @@
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
-            const editBtn = (currentUser.role === 'admin' || currentUser.name === item.author) ? 
+            
+            // ロック中、一般参加者は自分のコメントであっても修正・削除を不可にする判定
+            const canEdit = (currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked);
+
+            const editBtn = canEdit ? 
                 `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button>
                  <button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
             return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div>
@@ -310,6 +380,22 @@
                 if (!child.grandchildren) child.grandchildren = [];
                 child.grandchildren.push(item);
             }
+            updateFirebase();
+        }
+
+        // 管理者専用：ピンそのものを削除する機能
+        function deletePin(pid) {
+            if (!confirm("このピンと、付随するすべてのコメントを完全に削除しますか？")) return;
+            
+            // 該当ピンを削除
+            appData.pins = appData.pins.filter(p => p.id !== pid);
+            
+            // 残ったピンの番号を1から綺麗に再ナンバリング（歯抜け防止）
+            appData.pins.forEach((p, idx) => {
+                p.number = idx + 1;
+            });
+            
+            activePinId = null;
             updateFirebase();
         }
 
