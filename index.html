@@ -42,8 +42,8 @@
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
-        /* 【大改造】画面最下部に常時固定される、ボタン無しの「超極薄ステータスバー」 */
-        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #222; padding: 6px 12px; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
+        /* 【大改造】画面最下部に常時固定される、ボタン無しの「超極薄ステータスバー」 判別用に深海ブルー（#0d47a1）に変更 */
+        #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #0d47a1; padding: 6px 12px; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
@@ -91,7 +91,7 @@
                 <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
             </div>
             
-            <!-- 【注目】コメントの下に完全に埋め込まれた操作ボタンエリア（スクロールすると出現） -->
+            <!-- コメントの下に完全に埋め込まれた操作ボタンエリア（スクロールすると出現） -->
             <div id="scroll-action-area" style="margin-top: 30px; padding-top: 15px; border-top: 2px dashed #eee;">
                 
                 <!-- 管理者専用ツールバー（一般参加者には丸ごと非表示、白背景用の新デザイン） -->
@@ -110,10 +110,10 @@
             </div>
         </div>
 
-        <!-- 【常時固定】極薄ステータスバー（文字の表示のみ、ボタンは一切配置しない） -->
+        <!-- 【常時固定】極薄ステータスバー（判別用に【新レイアウト】の文字を追加） -->
         <div id="footer">
             <div id="sync-status">
-                <span id="status-text">● 同期待機中</span>
+                <span id="status-text">🔵【新レイアウト】同期中</span>
                 <span id="room-display"></span>
                 <span id="lock-status-display"></span>
                 <span id="user-display"></span>
@@ -164,10 +164,7 @@
             const code = document.getElementById('login-code').value.trim();
             
             if (!name || !room || !code) return alert("入力に不備があります。");
-
-            if (/[\.\$\#\[\]\/]/.test(room)) {
-                return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
-            }
+            if (/[\.\$\#\[\]\/]/.test(room)) return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
 
             currentRoom = room;
 
@@ -181,7 +178,7 @@
                     currentUser = { name, role: 'user' };
                 } else {
                     sessionStorage.removeItem('vmc_session');
-                    return alert("無効なコードです。部屋名または招待コードが間違っています。");
+                    return alert("無効なコードです。");
                 }
 
                 sessionStorage.setItem('vmc_session', JSON.stringify({ name, room, code }));
@@ -196,27 +193,16 @@
                 
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('main-screen').style.display = 'flex';
-
                 window.addEventListener('beforeunload', preventRowReload);
-
                 startListening();
             }).catch((error) => {
-                if(!isAutoRun) alert("通信エラーが発生しました。接続を確認してください。");
+                if(!isAutoRun) alert("通信エラーが発生しました。");
                 console.error(error);
             });
         }
 
-        function preventRowReload(e) {
-            e.preventDefault();
-            e.returnValue = ''; 
-        }
-
-        function logout() {
-            if (confirm("部屋を退室してログイン画面に戻りますか？")) {
-                sessionStorage.removeItem('vmc_session');
-                location.reload();
-            }
-        }
+        function preventRowReload(e) { e.preventDefault(); e.returnValue = ''; }
+        function logout() { if (confirm("部屋を退室しますか？")) { sessionStorage.removeItem('vmc_session'); location.reload(); } }
 
         function startListening() {
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
@@ -227,30 +213,17 @@
                 if (appData.inviteCode === undefined) appData.inviteCode = "1234";
 
                 if (appData.pins) {
-                    if (!Array.isArray(appData.pins)) {
-                        appData.pins = Object.values(appData.pins);
-                    }
+                    if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
                     appData.pins.forEach(pin => {
-                        if (!pin.children) {
-                            pin.children = [];
-                        } else if (!Array.isArray(pin.children)) {
-                            pin.children = Object.values(pin.children);
-                        }
+                        if (!pin.children) pin.children = [];
+                        else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
                         pin.children.forEach(child => {
-                            if (!child.grandchildren) {
-                                child.grandchildren = [];
-                            } else if (!Array.isArray(child.grandchildren)) {
-                                child.grandchildren = Object.values(child.grandchildren);
-                            }
+                            if (!child.grandchildren) child.grandchildren = [];
+                            else if (!Array.isArray(child.grandchildren)) child.grandchildren = Object.values(child.grandchildren);
                         });
                     });
-                } else {
-                    appData.pins = [];
-                }
+                } else { appData.pins = []; }
 
-                document.getElementById('status-text').innerText = "● リアルタイム同期中";
-                document.getElementById('sync-status').style.color = "#4CAF50";
-                
                 updateLockUI();
                 renderApp();
             });
@@ -270,10 +243,7 @@
                 lockDisplay.style.backgroundColor = "var(--primary)";
                 if (lockBtn) lockBtn.innerText = "🔒 部屋をロック";
             }
-
-            if (codeDisplay) {
-                codeDisplay.innerText = appData.inviteCode;
-            }
+            if (codeDisplay) codeDisplay.innerText = appData.inviteCode;
         }
 
         function generateInviteCode() {
@@ -285,14 +255,8 @@
             }
         }
 
-        function toggleLock() {
-            appData.locked = !appData.locked;
-            updateFirebase();
-        }
-
-        function updateFirebase() {
-            db.ref('rooms/' + currentRoom).set(appData);
-        }
+        function toggleLock() { appData.locked = !appData.locked; updateFirebase(); }
+        function updateFirebase() { db.ref('rooms/' + currentRoom).set(appData); }
 
         function loadImage(event) {
             const file = event.target.files[0];
@@ -319,11 +283,7 @@
 
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc) return;
-            
-            if (currentUser.role !== 'admin' && appData.locked) {
-                alert("この部屋は現在ロックされているため、新しくピンを立てることはできません。");
-                return;
-            }
+            if (currentUser.role !== 'admin' && appData.locked) { alert("ロック中のためピンを立てられません。"); return; }
 
             const rect = this.getBoundingClientRect();
             appData.pins.push({
@@ -338,13 +298,9 @@
 
         function renderApp() {
             const imgEl = document.getElementById('main-image');
-            if (appData.imageSrc) { 
-                imgEl.src = appData.imageSrc; 
-                imgEl.style.display = 'block'; 
-            } else {
-                imgEl.style.display = 'none';
-                imgEl.src = "";
-            }
+            if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; } 
+            else { imgEl.style.display = 'none'; imgEl.src = ""; }
+            
             const container = document.getElementById('pins-container');
             container.innerHTML = '';
             appData.pins.forEach(pin => {
@@ -361,12 +317,11 @@
         function renderComments() {
             const container = document.getElementById('comment-content');
             const pin = appData.pins.find(p => p.id === activePinId);
-            if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666;">ピンを選択してください</p>'; return; }
+            if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666; padding: 20px 0;">ピンを選択するとコメントが表示されます</p>'; return; }
             
-            let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <h3 style="margin:0;">No.${pin.number}</h3>`;
+            let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
             if (currentUser.role === 'admin') {
-                html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ このピンを削除</button>`;
+                html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ ピンを削除</button>`;
             }
             html += `</div>`;
 
@@ -375,11 +330,8 @@
             }
 
             if (!pin.mainComment) {
-                if (currentUser.role === 'admin' || !appData.locked) {
-                    html += createForm('main', pin.id, null);
-                } else {
-                    html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません</p>`;
-                }
+                if (currentUser.role === 'admin' || !appData.locked) html += createForm('main', pin.id, null);
+                else html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません</p>`;
             } else {
                 html += renderItem(pin.mainComment, 'main', pin.id, null, null);
                 (pin.children || []).forEach(c => {
@@ -388,16 +340,12 @@
                         html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`;
                     });
                     if (!(c.grandchildren) || c.grandchildren.length < 10) {
-                        if (currentUser.role === 'admin' || !appData.locked) {
-                            html += createForm('grand', pin.id, c.id);
-                        }
+                        if (currentUser.role === 'admin' || !appData.locked) html += createForm('grand', pin.id, c.id);
                     }
                     html += `</div>`;
                 });
                 if ((pin.children || []).length < 10) {
-                    if (currentUser.role === 'admin' || !appData.locked) {
-                        html += createForm('child', pin.id, null);
-                    }
+                    if (currentUser.role === 'admin' || !appData.locked) html += createForm('child', pin.id, null);
                 }
             }
             container.innerHTML = html;
@@ -406,26 +354,18 @@
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
-            
             const canEdit = (currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked);
-
-            const editBtn = canEdit ? 
-                `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button>
-                 <button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
-            return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div>
-                    <div class="comment-text">${item.text}</div><div class="comment-actions">${editBtn}</div></div>`;
+            const editBtn = canEdit ? `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
+            return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div><div class="comment-text">${item.text}</div><div class="comment-actions">${editBtn}</div></div>`;
         }
 
         function createForm(type, pid, cid) {
             let targetId = '';
             let btnArgs = `'${pid}', '${type}'`;
-            
             if (type === 'main') { targetId = `in-main-${pid}`; btnArgs += `, null`; }
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
-            
-            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" placeholder="コメントを入力..."></textarea>
-                    <button onclick="addItem(${btnArgs})">投稿</button></div>`;
+            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" placeholder="コメントを入力..."></textarea><button onclick="addItem(${btnArgs})">投稿</button></div>`;
         }
 
         function addItem(pid, type, cid) {
@@ -440,25 +380,16 @@
             const pin = appData.pins.find(p => p.id === pid);
             const item = { author: currentUser.name, text: txt, timestamp: Date.now(), id: Date.now().toString() };
             
-            if (type === 'main') {
-                pin.mainComment = item;
-            } else if (type === 'child') {
-                if (!pin.children) pin.children = [];
-                pin.children.push({ ...item, grandchildren: [] });
-            } else if (type === 'grand') {
-                const child = pin.children.find(c => c.id === cid);
-                if (!child.grandchildren) child.grandchildren = [];
-                child.grandchildren.push(item);
-            }
+            if (type === 'main') pin.mainComment = item;
+            else if (type === 'child') { if (!pin.children) pin.children = []; pin.children.push({ ...item, grandchildren: [] }); }
+            else if (type === 'grand') { const child = pin.children.find(c => c.id === cid); if (!child.grandchildren) child.grandchildren = []; child.grandchildren.push(item); }
             updateFirebase();
         }
 
         function deletePin(pid) {
-            if (!confirm("このピンと、付随するすべてのコメントを完全に削除しますか？")) return;
+            if (!confirm("ピンを削除しますか？")) return;
             appData.pins = appData.pins.filter(p => p.id !== pid);
-            appData.pins.forEach((p, idx) => {
-                p.number = idx + 1;
-            });
+            appData.pins.forEach((p, idx) => p.number = idx + 1);
             activePinId = null;
             updateFirebase();
         }
@@ -469,7 +400,6 @@
             if (type === 'main') target = pin.mainComment;
             else if (type === 'child') target = pin.children.find(c => c.id === cid);
             else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
-            
             if (!target) return;
             const n = prompt("修正", target.text);
             if (n && n.trim()) { target.text = n.trim(); updateFirebase(); }
@@ -485,11 +415,7 @@
         }
 
         function saveJSON() {
-            const outputData = {
-                roomName: currentRoom,
-                exportedAt: new Date().toLocaleString(),
-                appData: appData
-            };
+            const outputData = { roomName: currentRoom, exportedAt: new Date().toLocaleString(), appData: appData };
             const blob = new Blob([JSON.stringify(outputData)], {type: "application/json"});
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
@@ -504,22 +430,11 @@
             reader.onload = (e) => {
                 try {
                     const json = JSON.parse(e.target.result);
-                    if (json.roomName && json.appData) {
-                        if (json.roomName !== currentRoom) {
-                            const proceed = confirm(`⚠️【部屋名不一致の警告】\nこのファイルは別の部屋「${json.roomName}」のデータです。\n上書き消去されますが、本当によろしいですか？`);
-                            if (!proceed) return;
-                        }
-                        appData = json.appData;
-                    } else {
-                        const proceed = confirm("⚠️ 古い形式のファイルです。上書き読み込みしますか？");
-                        if (!proceed) return;
-                        appData = json;
-                    }
+                    if (json.roomName && json.appData) appData = json.appData;
+                    else appData = json;
                     updateFirebase();
-                    alert("データの読み込みが完了しました。");
-                } catch (err) { 
-                    alert("読み込みに失敗しました。"); 
-                }
+                    alert("データを読み込みました。");
+                } catch (err) { alert("失敗しました。"); }
             };
             reader.readAsText(file);
         }
