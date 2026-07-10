@@ -72,11 +72,11 @@
             <input type="text" id="login-code" placeholder="招待コード" maxlength="8" required>
             <button onclick="login()">ログインして参加</button>
             
-            <!-- 【新設】後日の振り返り用セクション -->
+            <!-- 後日の振り返り用セクション -->
             <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
             <p style="font-size: 11px; color: #666; margin-bottom:8px;">🎒 配布された保存データをお持ちの方</p>
             <label style="display:block; padding:10px; background:#4CAF50; color:white; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; text-align:center;">
-                📂 保存ファイルから振り返る (ログイン不要)
+                📂 アルバムモードで振り返る (ログイン不要)
                 <input type="file" accept=".json" onchange="reviewLoadJSON(event)">
             </label>
         </div>
@@ -101,7 +101,7 @@
             <!-- 操作ボタンエリア -->
             <div id="scroll-action-area" style="margin-top: 30px; padding-top: 15px; border-top: 2px dashed #eee;">
                 
-                <!-- 管理者専用ツールバー（保存ボタンもここに統合） -->
+                <!-- 管理者専用ツールバー -->
                 <div id="admin-toolbar" class="hidden">
                     <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
                     <button id="btn-lock-toggle" class="action-btn" style="background:#616161; color:white;" onclick="toggleLock()">🔒 部屋をロック</button>
@@ -110,7 +110,7 @@
                     <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
                 </div>
 
-                <!-- 共通ボタン（参加者・振り返り時はこれだけが見えます） -->
+                <!-- 共通ボタン -->
                 <div style="width: 100%;">
                     <button onclick="logout()" style="width: 100%; background: #757575; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室 (終了する)</button>
                 </div>
@@ -147,7 +147,7 @@
         let currentRoom = "default";
         let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
         let activePinId = null;
-        let isReviewMode = false; // 振り返りモード判定フラグ
+        let isReviewMode = false;
 
         const ADMIN_CODE = "ADMIN123";
 
@@ -211,7 +211,7 @@
 
         function preventRowReload(e) { e.preventDefault(); e.returnValue = ''; }
         function logout() { 
-            const msg = isReviewMode ? "振り返りモードを終了しますか？" : "部屋を退室しますか？";
+            const msg = isReviewMode ? "アルバムモードを終了しますか？" : "部屋を退室しますか？";
             if (confirm(msg)) { sessionStorage.removeItem('vmc_session'); location.reload(); } 
         }
 
@@ -273,7 +273,7 @@
         function toggleLock() { if(isReviewMode) return; appData.locked = !appData.locked; updateFirebase(); }
         
         function updateFirebase() { 
-            if (isReviewMode) return; // 振り返りモード中は通信を完全遮断
+            if (isReviewMode) return;
             db.ref('rooms/' + currentRoom).set(appData); 
         }
 
@@ -436,12 +436,22 @@
             updateFirebase();
         }
 
+        /* 【改修】ファイル名を西暦年月日時刻（YYYYMMDDHHMM）の形式に整形 */
         function saveJSON() {
             const outputData = { roomName: currentRoom, exportedAt: new Date().toLocaleString(), appData: appData };
             const blob = new Blob([JSON.stringify(outputData)], {type: "application/json"});
+            
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const date = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const timeStr = `${year}${month}${date}${hours}${minutes}`;
+
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `backup_${currentRoom}_${Date.now()}.json`;
+            a.download = `backup_${currentRoom}_${timeStr}.json`;
             a.click();
         }
 
@@ -462,7 +472,6 @@
             reader.readAsText(file);
         }
 
-        /* 【新設】ログイン不要の振り返りモード専用読み込み処理 */
         function reviewLoadJSON(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -480,25 +489,22 @@
                     
                     repairDataStructure();
                     
-                    // 振り返り用の状態をセット (サーバー通信を遮断し、完全ロック)
                     isReviewMode = true;
                     currentUser = { name: "閲覧者", role: "user" };
                     appData.locked = true;
 
-                    // フッターとステータスを専用表示に書き換え
-                    document.getElementById('status-text').innerText = `🟢【振り返り】データ閲覧中`;
+                    document.getElementById('status-text').innerText = `🟢【アルバム】データ閲覧中`;
                     document.getElementById('room-display').innerText = `🏠 記録: ${currentRoom}`;
                     document.getElementById('lock-status-display').innerText = `🔒 閲覧専用`;
                     document.getElementById('lock-status-display').style.backgroundColor = "var(--danger)";
                     document.getElementById('user-display').innerText = `👤 オフライン`;
 
-                    // 画面の切り替え
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('main-screen').style.display = 'flex';
                     
                     activePinId = null;
                     renderApp();
-                    alert("保存されたデータを読み込みました！閲覧専用モードで起動します。");
+                    alert("保存されたデータを読み込みました！アルバムモードで起動します。");
                 } catch (err) { 
                     alert("ファイルの読み込みに失敗しました。正しいJSONファイルか確認してください。"); 
                 }
