@@ -25,8 +25,9 @@
         #image-container { position: relative; display: inline-block; transform-origin: top left; }
         #main-image { max-width: none; display: block; }
         
-        .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
-        .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
+        /* ピンの基本スタイル（デフォルト赤） */
+        .pin { position: absolute; width: 24px; height: 24px; background: #ef5350; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
+        .pin.active { background: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
         /* コメントエリア */
         #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px 15px 50px 15px; }
@@ -54,6 +55,11 @@
         #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; align-items: center; background: #f5f5f5; padding: 12px; border-radius: 6px; border: 1px dashed #ccc; margin-bottom: 12px; }
         #container-admin-code { color: #333; font-size: 12px; font-weight: bold; width: 100%; margin-bottom: 4px; }
         
+        /* 色選択ボタン */
+        .color-selector-wrapper { width: 100%; display: flex; align-items: center; gap: 8px; margin: 4px 0 8px 0; padding: 6px; background: #fff; border: 1px solid #ddd; border-radius: 4px; }
+        .color-btn { padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; color: white; transition: all 0.2s; }
+        .color-btn.active { border: 2px solid #000 !important; transform: scale(1.05); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
         input[type="file"] { display: none; }
         .hidden { display: none !important; }
     </style>
@@ -104,6 +110,15 @@
                 <!-- 管理者専用ツールバー -->
                 <div id="admin-toolbar" class="hidden">
                     <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
+                    
+                    <!-- 【新機能】次に配置するピンの色切り替え（タイムライン連動） -->
+                    <div class="color-selector-wrapper">
+                        <span style="font-size: 11px; color: #555; font-weight: bold;">📍 次のピン色:</span>
+                        <button id="btn-col-red" class="color-btn" style="background:#ef5350;" onclick="setNextPinColor('red')">🔴 前半</button>
+                        <button id="btn-col-orange" class="color-btn" style="background:#ff9800;" onclick="setNextPinColor('orange')">🟠 中盤</button>
+                        <button id="btn-col-limegreen" class="color-btn" style="background:#8bc34a;" onclick="setNextPinColor('limegreen')">🟢 後半</button>
+                    </div>
+
                     <button id="btn-lock-toggle" class="action-btn" style="background:#616161; color:white;" onclick="toggleLock()">🔒 部屋をロック</button>
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
@@ -145,7 +160,8 @@
 
         let currentUser = { name: "", role: "" }; 
         let currentRoom = "default";
-        let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
+        // currentPinColor を追加（デフォルトは前半の赤: red）
+        let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234", currentPinColor: "red" };
         let activePinId = null;
         let isReviewMode = false;
 
@@ -219,13 +235,15 @@
             if (isReviewMode) return;
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
-                appData = data || { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
+                appData = data || { imageSrc: "", pins: [], locked: false, inviteCode: "1234", currentPinColor: "red" };
                 
                 if (appData.locked === undefined) appData.locked = false;
                 if (appData.inviteCode === undefined) appData.inviteCode = "1234";
+                if (!appData.currentPinColor) appData.currentPinColor = "red";
 
                 repairDataStructure();
                 updateLockUI();
+                updateColorSelectorUI(); // 追加
                 renderApp();
             });
         }
@@ -234,6 +252,7 @@
             if (appData.pins) {
                 if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
                 appData.pins.forEach(pin => {
+                    if (!pin.color) pin.color = 'red'; // 過去データ救済用
                     if (!pin.children) pin.children = [];
                     else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
                     pin.children.forEach(child => {
@@ -261,6 +280,21 @@
             if (codeDisplay) codeDisplay.innerText = appData.inviteCode;
         }
 
+        /* 【新機能】管理者の現在の色選択状況をUIに反映 */
+        function updateColorSelectorUI() {
+            if (currentUser.role !== 'admin') return;
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`btn-col-${appData.currentPinColor}`);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        /* 【新機能】管理者が次に立てるピンの色を切り替える処理 */
+        function setNextPinColor(color) {
+            if (isReviewMode || currentUser.role !== 'admin') return;
+            appData.currentPinColor = color;
+            updateFirebase();
+        }
+
         function generateInviteCode() {
             if (currentUser.role !== 'admin' || isReviewMode) return;
             const newCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -277,8 +311,16 @@
             db.ref('rooms/' + currentRoom).set(appData); 
         }
 
+        /* 【改修】画像読み込み時に誤操作防止のガードを追加 */
         function loadImage(event) {
             if (isReviewMode) return;
+            
+            // 安全策の確認メッセージ
+            if (!confirm("新しい画像を読み込みますか？\n（現在配置されているピンやコメントはすべてリセットされます）")) {
+                event.target.value = ""; // 選択をクリア
+                return;
+            }
+
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -293,6 +335,7 @@
                     canvas.getContext('2d').drawImage(img, 0, 0, width, height);
                     appData.imageSrc = canvas.toDataURL('image/jpeg', 0.7);
                     appData.pins = [];
+                    appData.currentPinColor = "red"; // 画像変更時は赤に初期化
                     activePinId = null;
                     updateFirebase();
                 };
@@ -301,21 +344,27 @@
             reader.readAsDataURL(file);
         }
 
+        /* 【改修】タップされた時の色（colorプロパティ）を保存するように拡張 */
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc || isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) { alert("ロック中のためピンを立てられません。"); return; }
 
             const rect = this.getBoundingClientRect();
+            // 現在のフェーズの色をピンに持たせる（未定義なら赤）
+            const chosenColor = appData.currentPinColor || 'red';
+
             appData.pins.push({
                 id: Date.now().toString(),
                 number: appData.pins.length + 1,
                 x: ((e.clientX - rect.left) / rect.width) * 100,
                 y: ((e.clientY - rect.top) / rect.height) * 100,
+                color: chosenColor, 
                 mainComment: null, children: []
             });
             updateFirebase();
         });
 
+        /* 【改修】保存されたピンの色で描画する（アクティブ時は青に上書き） */
         function renderApp() {
             const imgEl = document.getElementById('main-image');
             if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; } 
@@ -327,6 +376,12 @@
                 const el = document.createElement('div');
                 el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
                 el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
+                
+                // 【重要】アクティブでなければ、ピンが打たれた時点の色を適用する
+                if (pin.id !== activePinId) {
+                    el.style.backgroundColor = pin.color || '#ef5350';
+                }
+                
                 el.innerText = pin.number;
                 el.onclick = (e) => { e.stopPropagation(); activePinId = pin.id; renderApp(); };
                 container.appendChild(el);
@@ -436,7 +491,6 @@
             updateFirebase();
         }
 
-        /* 【改修】ファイル名を西暦年月日時刻（YYYYMMDDHHMM）の形式に整形 */
         function saveJSON() {
             const outputData = { roomName: currentRoom, exportedAt: new Date().toLocaleString(), appData: appData };
             const blob = new Blob([JSON.stringify(outputData)], {type: "application/json"});
@@ -455,8 +509,16 @@
             a.click();
         }
 
+        /* 【改修】データ読み込み時に誤操作防止のガードを追加 */
         function loadJSON(event) {
             if (isReviewMode) return;
+
+            // 安全策の確認メッセージ
+            if (!confirm("外部データを読み込みますか？\n（現在編集中の画面データはすべて上書きされます）")) {
+                event.target.value = ""; // 選択をクリア
+                return;
+            }
+
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -466,8 +528,8 @@
                     if (json.roomName && json.appData) appData = json.appData;
                     else appData = json;
                     updateFirebase();
-                    alert("データを読み込みました。");
-                } catch (err) { alert("失敗しました。"); }
+                    alert("データを正常に読み込みました。");
+                } catch (err) { alert("ファイルの読み込みに失敗しました。"); }
             };
             reader.readAsText(file);
         }
