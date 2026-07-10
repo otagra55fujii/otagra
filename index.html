@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (フッター完全スリム版)</title>
+    <title>画像マッピングコメント機能 (ワークショップ特化版)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -28,7 +28,7 @@
         .pin { position: absolute; width: 24px; height: 24px; background: red; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background: blue; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
-        /* コメントエリア（ここ自体が独立してスクロールする。最下部にボタン群を内包） */
+        /* コメントエリア */
         #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px 15px 50px 15px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
@@ -42,14 +42,14 @@
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
         
-        /* 【大改造】画面最下部に常時固定される、ボタン無しの「超極薄ステータスバー」 判別用に深海ブルー（#0d47a1）に変更 */
+        /* 画面最下部に常時固定される極薄ステータスバー */
         #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #0d47a1; padding: 6px 12px; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
         #sync-status { color: #fff; font-size: 11px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
         #room-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: auto; margin-left: 10px; }
         #lock-status-display { padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-right: 10px; color: white; }
         #user-display { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; font-weight: bold; }
         
-        /* 白背景のコメント欄の下に引っ越した、新しいデザインのボタン群 */
+        /* 操作ボタンエリア */
         .action-btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; text-align: center; }
         #admin-toolbar { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; align-items: center; background: #f5f5f5; padding: 12px; border-radius: 6px; border: 1px dashed #ccc; margin-bottom: 12px; }
         #container-admin-code { color: #333; font-size: 12px; font-weight: bold; width: 100%; margin-bottom: 4px; }
@@ -63,14 +63,22 @@
     <!-- ログイン画面 -->
     <div id="login-screen">
         <div class="login-box">
-            <h3>ログイン</h3>
+            <h3>ワークショップに接続</h3>
             <p style="font-size: 11px; color: #666; text-align: left;">
-                管理者: ADMIN123 / 参加者: 各部屋の招待コード(初期値1234)
+                管理者: ADMIN123 / 参加者: 招待コード
             </p>
             <input type="text" id="login-name" placeholder="表示名" required>
             <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A)" required>
             <input type="text" id="login-code" placeholder="招待コード" maxlength="8" required>
-            <button onclick="login()">ログイン</button>
+            <button onclick="login()">ログインして参加</button>
+            
+            <!-- 【新設】後日の振り返り用セクション -->
+            <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
+            <p style="font-size: 11px; color: #666; margin-bottom:8px;">🎒 配布された保存データをお持ちの方</p>
+            <label style="display:block; padding:10px; background:#4CAF50; color:white; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; text-align:center;">
+                📂 保存ファイルから振り返る (ログイン不要)
+                <input type="file" accept=".json" onchange="reviewLoadJSON(event)">
+            </label>
         </div>
     </div>
 
@@ -84,36 +92,35 @@
             </div>
         </div>
 
-        <!-- 下半分：コメントエリア（このエリア自体が独立してスクロールします） -->
+        <!-- 下半分：コメントエリア -->
         <div id="comment-area">
-            <!-- リアルタイムに書き換わるコメント本文エリア -->
             <div id="comment-content">
                 <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
             </div>
             
-            <!-- コメントの下に完全に埋め込まれた操作ボタンエリア（スクロールすると出現） -->
+            <!-- 操作ボタンエリア -->
             <div id="scroll-action-area" style="margin-top: 30px; padding-top: 15px; border-top: 2px dashed #eee;">
                 
-                <!-- 管理者専用ツールバー（一般参加者には丸ごと非表示、白背景用の新デザイン） -->
+                <!-- 管理者専用ツールバー（保存ボタンもここに統合） -->
                 <div id="admin-toolbar" class="hidden">
                     <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
                     <button id="btn-lock-toggle" class="action-btn" style="background:#616161; color:white;" onclick="toggleLock()">🔒 部屋をロック</button>
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
+                    <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
                 </div>
 
-                <!-- 全員共通ボタン（コメントの下に常駐。スクロールでアクセス可能） -->
-                <div style="width: 100%; display: flex; gap: 6px; justify-content: space-between;">
-                    <button onclick="saveJSON()" style="flex: 3; background: #2196F3; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">📥 結果を自分の端末に保存(JSON)</button>
-                    <button onclick="logout()" style="flex: 1; background: #757575; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室</button>
+                <!-- 共通ボタン（参加者・振り返り時はこれだけが見えます） -->
+                <div style="width: 100%;">
+                    <button onclick="logout()" style="width: 100%; background: #757575; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室 (終了する)</button>
                 </div>
             </div>
         </div>
 
-        <!-- 【常時固定】極薄ステータスバー（判別用に【新レイアウト】の文字を追加） -->
+        <!-- 常時固定ステータスバー -->
         <div id="footer">
             <div id="sync-status">
-                <span id="status-text">🔵【新レイアウト】同期中</span>
+                <span id="status-text">🔵 同期中</span>
                 <span id="room-display"></span>
                 <span id="lock-status-display"></span>
                 <span id="user-display"></span>
@@ -140,6 +147,7 @@
         let currentRoom = "default";
         let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
         let activePinId = null;
+        let isReviewMode = false; // 振り返りモード判定フラグ
 
         const ADMIN_CODE = "ADMIN123";
 
@@ -202,9 +210,13 @@
         }
 
         function preventRowReload(e) { e.preventDefault(); e.returnValue = ''; }
-        function logout() { if (confirm("部屋を退室しますか？")) { sessionStorage.removeItem('vmc_session'); location.reload(); } }
+        function logout() { 
+            const msg = isReviewMode ? "振り返りモードを終了しますか？" : "部屋を退室しますか？";
+            if (confirm(msg)) { sessionStorage.removeItem('vmc_session'); location.reload(); } 
+        }
 
         function startListening() {
+            if (isReviewMode) return;
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
                 appData = data || { imageSrc: "", pins: [], locked: false, inviteCode: "1234" };
@@ -212,21 +224,24 @@
                 if (appData.locked === undefined) appData.locked = false;
                 if (appData.inviteCode === undefined) appData.inviteCode = "1234";
 
-                if (appData.pins) {
-                    if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
-                    appData.pins.forEach(pin => {
-                        if (!pin.children) pin.children = [];
-                        else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
-                        pin.children.forEach(child => {
-                            if (!child.grandchildren) child.grandchildren = [];
-                            else if (!Array.isArray(child.grandchildren)) child.grandchildren = Object.values(child.grandchildren);
-                        });
-                    });
-                } else { appData.pins = []; }
-
+                repairDataStructure();
                 updateLockUI();
                 renderApp();
             });
+        }
+
+        function repairDataStructure() {
+            if (appData.pins) {
+                if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
+                appData.pins.forEach(pin => {
+                    if (!pin.children) pin.children = [];
+                    else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
+                    pin.children.forEach(child => {
+                        if (!child.grandchildren) child.grandchildren = [];
+                        else if (!Array.isArray(child.grandchildren)) child.grandchildren = Object.values(child.grandchildren);
+                    });
+                });
+            } else { appData.pins = []; }
         }
 
         function updateLockUI() {
@@ -247,7 +262,7 @@
         }
 
         function generateInviteCode() {
-            if (currentUser.role !== 'admin') return;
+            if (currentUser.role !== 'admin' || isReviewMode) return;
             const newCode = Math.floor(1000 + Math.random() * 9000).toString();
             if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？`)) {
                 appData.inviteCode = newCode;
@@ -255,10 +270,15 @@
             }
         }
 
-        function toggleLock() { appData.locked = !appData.locked; updateFirebase(); }
-        function updateFirebase() { db.ref('rooms/' + currentRoom).set(appData); }
+        function toggleLock() { if(isReviewMode) return; appData.locked = !appData.locked; updateFirebase(); }
+        
+        function updateFirebase() { 
+            if (isReviewMode) return; // 振り返りモード中は通信を完全遮断
+            db.ref('rooms/' + currentRoom).set(appData); 
+        }
 
         function loadImage(event) {
+            if (isReviewMode) return;
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -282,7 +302,7 @@
         }
 
         document.getElementById('image-container').addEventListener('click', function(e) {
-            if (e.target.classList.contains('pin') || !appData.imageSrc) return;
+            if (e.target.classList.contains('pin') || !appData.imageSrc || isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) { alert("ロック中のためピンを立てられません。"); return; }
 
             const rect = this.getBoundingClientRect();
@@ -320,17 +340,17 @@
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666; padding: 20px 0;">ピンを選択するとコメントが表示されます</p>'; return; }
             
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
-            if (currentUser.role === 'admin') {
+            if (currentUser.role === 'admin' && !isReviewMode) {
                 html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ ピンを削除</button>`;
             }
             html += `</div>`;
 
-            if (currentUser.role !== 'admin' && appData.locked) {
+            if (appData.locked || isReviewMode) {
                 html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 閲覧専用(ロック)</p>`;
             }
 
             if (!pin.mainComment) {
-                if (currentUser.role === 'admin' || !appData.locked) html += createForm('main', pin.id, null);
+                if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('main', pin.id, null);
                 else html += `<p style="text-align:center; color:#999; font-size:13px;">コメントはありません</p>`;
             } else {
                 html += renderItem(pin.mainComment, 'main', pin.id, null, null);
@@ -340,12 +360,12 @@
                         html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`;
                     });
                     if (!(c.grandchildren) || c.grandchildren.length < 10) {
-                        if (currentUser.role === 'admin' || !appData.locked) html += createForm('grand', pin.id, c.id);
+                        if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('grand', pin.id, c.id);
                     }
                     html += `</div>`;
                 });
                 if ((pin.children || []).length < 10) {
-                    if (currentUser.role === 'admin' || !appData.locked) html += createForm('child', pin.id, null);
+                    if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('child', pin.id, null);
                 }
             }
             container.innerHTML = html;
@@ -354,7 +374,7 @@
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
-            const canEdit = (currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked);
+            const canEdit = ((currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked)) && !isReviewMode;
             const editBtn = canEdit ? `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
             return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div><div class="comment-text">${item.text}</div><div class="comment-actions">${editBtn}</div></div>`;
         }
@@ -369,6 +389,7 @@
         }
 
         function addItem(pid, type, cid) {
+            if (isReviewMode) return;
             let targetId = '';
             if (type === 'main') targetId = `in-main-${pid}`;
             else if (type === 'child') targetId = `in-child-${pid}`;
@@ -387,7 +408,7 @@
         }
 
         function deletePin(pid) {
-            if (!confirm("ピンを削除しますか？")) return;
+            if (!confirm("ピンを削除しますか？") || isReviewMode) return;
             appData.pins = appData.pins.filter(p => p.id !== pid);
             appData.pins.forEach((p, idx) => p.number = idx + 1);
             activePinId = null;
@@ -395,6 +416,7 @@
         }
 
         function editItem(pid, type, cid, gid) {
+            if (isReviewMode) return;
             const pin = appData.pins.find(p => p.id === pid);
             let target;
             if (type === 'main') target = pin.mainComment;
@@ -406,7 +428,7 @@
         }
 
         function deleteItem(pid, type, cid, gid) {
-            if (!confirm("削除しますか？")) return;
+            if (!confirm("削除しますか？") || isReviewMode) return;
             const pin = appData.pins.find(p => p.id === pid);
             if (type === 'main') { pin.mainComment = null; pin.children = []; }
             else if (type === 'child') pin.children = pin.children.filter(c => c.id !== cid);
@@ -424,6 +446,7 @@
         }
 
         function loadJSON(event) {
+            if (isReviewMode) return;
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -435,6 +458,50 @@
                     updateFirebase();
                     alert("データを読み込みました。");
                 } catch (err) { alert("失敗しました。"); }
+            };
+            reader.readAsText(file);
+        }
+
+        /* 【新設】ログイン不要の振り返りモード専用読み込み処理 */
+        function reviewLoadJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if (json.roomName && json.appData) {
+                        appData = json.appData;
+                        currentRoom = json.roomName;
+                    } else {
+                        appData = json;
+                        currentRoom = "不明な部屋";
+                    }
+                    
+                    repairDataStructure();
+                    
+                    // 振り返り用の状態をセット (サーバー通信を遮断し、完全ロック)
+                    isReviewMode = true;
+                    currentUser = { name: "閲覧者", role: "user" };
+                    appData.locked = true;
+
+                    // フッターとステータスを専用表示に書き換え
+                    document.getElementById('status-text').innerText = `🟢【振り返り】データ閲覧中`;
+                    document.getElementById('room-display').innerText = `🏠 記録: ${currentRoom}`;
+                    document.getElementById('lock-status-display').innerText = `🔒 閲覧専用`;
+                    document.getElementById('lock-status-display').style.backgroundColor = "var(--danger)";
+                    document.getElementById('user-display').innerText = `👤 オフライン`;
+
+                    // 画面の切り替え
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('main-screen').style.display = 'flex';
+                    
+                    activePinId = null;
+                    renderApp();
+                    alert("保存されたデータを読み込みました！閲覧専用モードで起動します。");
+                } catch (err) { 
+                    alert("ファイルの読み込みに失敗しました。正しいJSONファイルか確認してください。"); 
+                }
             };
             reader.readAsText(file);
         }
