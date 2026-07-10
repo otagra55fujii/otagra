@@ -25,19 +25,25 @@
         #image-container { position: relative; display: inline-block; transform-origin: top left; }
         #main-image { max-width: none; display: block; }
         
-        /* 【バグ修正】 background から background-color に変更し、JSからの色上書きを確実に承諾させる */
-        .pin { position: absolute; width: 24px; height: 24px; background-color: #ef5350; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
-        .pin.active { background-color: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
+        /* ピンの基本スタイル */
+        .pin { position: absolute; width: 24px; height: 24px; background-color: #ef5350; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; transition: opacity 0.2s; }
+        .pin.active { background-color: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; opacity: 1.0 !important; display: flex !important; }
         
         /* コメントエリア */
         #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px 15px 50px 15px; }
         .comment-block { border: 1px solid var(--border); padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
         .child-comment { margin-left: 20px; border-left: 3px solid var(--primary); padding-left: 10px; margin-top: 5px; }
         .grandchild-comment { margin-left: 20px; border-left: 3px solid #FF9800; padding-left: 10px; margin-top: 5px; }
-        .comment-header { font-size: 12px; color: #666; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .comment-header { font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
         .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
         
+        /* 【追加】いいね！スタンプボタン */
+        .like-btn { background: #f1f1f1; border: 1px solid #ccc; border-radius: 12px; padding: 2px 8px; font-size: 11px; cursor: pointer; transition: all 0.2s; font-weight: bold; color: #555; display: inline-flex; align-items: center; gap: 4px; }
+        .like-btn.liked { background: #ffebee; border-color: #ff8a80; color: #e53935; }
+        .like-btn:hover { background: #e0e0e0; }
+        .like-btn.liked:hover { background: #ffcdd2; }
+
         /* 投稿フォーム */
         .add-comment-form { display: flex; flex-direction: row; gap: 5px; margin-top: 8px; align-items: center; width: 100%; }
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
@@ -92,6 +98,8 @@
     <div id="main-screen">
         <!-- 上半分：画像エリア -->
         <div id="image-area">
+            <!-- 【追加】ピンの全体見渡し切り替えフロートボタン -->
+            <button id="btn-pin-toggle" class="hidden" onclick="togglePinVisibility()" style="position: absolute; top: 10px; right: 10px; z-index: 100; background: rgba(0,0,0,0.7); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 ピン: 表示中</button>
             <div id="image-container">
                 <img id="main-image" src="" style="display:none;">
                 <div id="pins-container"></div>
@@ -123,7 +131,8 @@
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
                     <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
-                    <!-- 【新機能】部屋の初期化ボタンを追加 -->
+                    <!-- 【追加】Excel用CSV書き出しボタン -->
+                    <button onclick="exportCSV()" class="action-btn" style="background: #00796b; color: white;">📊 コメントをExcel用に書き出し(CSV)</button>
                     <button onclick="clearRoom()" class="action-btn" style="background: #e53935; color: white;">🧹 部屋のデータを初期化</button>
                 </div>
 
@@ -160,7 +169,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // カラーコードの明確なマッピング定義
+        // カラーコードのマッピング
         const PIN_COLORS = {
             red: "#ef5350",
             orange: "#ff9800",
@@ -172,6 +181,9 @@
         let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234", currentPinColor: "red" };
         let activePinId = null;
         let isReviewMode = false;
+        
+        // 【ローカルステート】ピンの表示切り替え（'normal' / 'semi' / 'hidden'）
+        let pinVisibilityState = 'normal'; 
 
         const ADMIN_CODE = "ADMIN123";
 
@@ -256,16 +268,22 @@
             });
         }
 
+        /* 【補強】いいねスタンプのデータ構造が壊れないように補修 */
         function repairDataStructure() {
             if (appData.pins) {
                 if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
                 appData.pins.forEach(pin => {
                     if (!pin.color) pin.color = 'red'; 
+                    if (pin.mainComment && !pin.mainComment.likes) pin.mainComment.likes = {};
                     if (!pin.children) pin.children = [];
                     else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
                     pin.children.forEach(child => {
+                        if (!child.likes) child.likes = {};
                         if (!child.grandchildren) child.grandchildren = [];
                         else if (!Array.isArray(child.grandchildren)) child.grandchildren = Object.values(child.grandchildren);
+                        child.grandchildren.forEach(g => {
+                            if (!g.likes) g.likes = {};
+                        });
                     });
                 });
             } else { appData.pins = []; }
@@ -348,7 +366,6 @@
             reader.readAsDataURL(file);
         }
 
-        /* 【新機能】部屋のデータを完全に初期化する（更地に戻す） */
         function clearRoom() {
             if (isReviewMode || currentUser.role !== 'admin') return;
             
@@ -366,6 +383,22 @@
                     alert("部屋のデータを初期化しました。");
                 }
             }
+        }
+
+        /* 【新機能】ピンの全体見渡し切り替え（表示 ➔ 半透明 ➔ 非表示） */
+        function togglePinVisibility() {
+            const btn = document.getElementById('btn-pin-toggle');
+            if (pinVisibilityState === 'normal') {
+                pinVisibilityState = 'semi';
+                btn.innerText = '📍 ピン: 半透明';
+            } else if (pinVisibilityState === 'semi') {
+                pinVisibilityState = 'hidden';
+                btn.innerText = '📍 ピン: 非表示';
+            } else {
+                pinVisibilityState = 'normal';
+                btn.innerText = '📍 ピン: 表示中';
+            }
+            renderApp();
         }
 
         document.getElementById('image-container').addEventListener('click', function(e) {
@@ -386,11 +419,20 @@
             updateFirebase();
         });
 
-        /* 【バグ修正】色の流し込み方をカラーコード経由に強化 */
+        /* 【補強】ピン表示切り替えの反映と、フロート表示の制御 */
         function renderApp() {
             const imgEl = document.getElementById('main-image');
-            if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; } 
-            else { imgEl.style.display = 'none'; imgEl.src = ""; }
+            const pinToggleBtn = document.getElementById('btn-pin-toggle');
+            
+            if (appData.imageSrc) { 
+                imgEl.src = appData.imageSrc; 
+                imgEl.style.display = 'block'; 
+                pinToggleBtn.classList.remove('hidden'); // 画像があればピン表示ボタンを出現させる
+            } else { 
+                imgEl.style.display = 'none'; 
+                imgEl.src = ""; 
+                pinToggleBtn.classList.add('hidden');
+            }
             
             const container = document.getElementById('pins-container');
             container.innerHTML = '';
@@ -399,10 +441,17 @@
                 el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
                 el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
                 
-                // 選択中でないピンに、打たれたフェーズに合わせたカラーコードを強制適用
+                // 選択中でないピンの色をマッピング通りに適用
                 if (pin.id !== activePinId) {
                     const pColor = pin.color || 'red';
                     el.style.backgroundColor = PIN_COLORS[pColor] || pColor;
+                    
+                    // 全体見渡しモード（半透明・非表示）の反映
+                    if (pinVisibilityState === 'semi') {
+                        el.style.opacity = '0.15';
+                    } else if (pinVisibilityState === 'hidden') {
+                        el.style.display = 'none';
+                    }
                 }
                 
                 el.innerText = pin.number;
@@ -449,12 +498,63 @@
             container.innerHTML = html;
         }
 
+        /* 【新機能】「いいね！スタンプ」を反映したコメント描画 */
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
             const canEdit = ((currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked)) && !isReviewMode;
             const editBtn = canEdit ? `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
-            return `<div class="comment-block"><div class="comment-header"><span>${item.author}</span></div><div class="comment-text">${item.text}</div><div class="comment-actions">${editBtn}</div></div>`;
+            
+            // いいね！の解析と描画
+            const likesObj = item.likes || {};
+            const likeCount = Object.keys(likesObj).length;
+            const hasLiked = !!likesObj[currentUser.name];
+            const likeBtnLabel = hasLiked ? `❤️ ${likeCount}` : `🤍 ${likeCount}`;
+            const likeBtnClass = hasLiked ? 'liked' : '';
+            
+            // 閲覧モードやロック時はいいねを押せない
+            const canLike = !isReviewMode && (currentUser.role === 'admin' || !appData.locked);
+            const likeDisabledAttr = canLike ? '' : 'disabled style="cursor: not-allowed; opacity: 0.6;"';
+
+            return `
+                <div class="comment-block">
+                    <div class="comment-header">
+                        <span><b>${item.author}</b></span>
+                        <button class="like-btn ${likeBtnClass}" ${likeDisabledAttr} onclick="toggleLike('${pid}','${type}',${cidArg},${gidArg})">${likeBtnLabel}</button>
+                    </div>
+                    <div class="comment-text">${item.text}</div>
+                    <div class="comment-actions">${editBtn}</div>
+                </div>
+            `;
+        }
+
+        /* 【新機能】「いいね！」スタンプのトグル処理 */
+        function toggleLike(pid, type, cid, gid) {
+            if (isReviewMode) return;
+            if (currentUser.role !== 'admin' && appData.locked) return alert("ロック中のためいいねは押せません。");
+
+            const pin = appData.pins.find(p => p.id === pid);
+            if (!pin) return;
+
+            let target;
+            if (type === 'main') {
+                target = pin.mainComment;
+            } else if (type === 'child') {
+                target = pin.children.find(c => c.id === cid);
+            } else if (type === 'grand') {
+                const child = pin.children.find(c => c.id === cid);
+                if (child) target = child.grandchildren.find(g => g.id === gid);
+            }
+
+            if (!target) return;
+            if (!target.likes) target.likes = {};
+
+            if (target.likes[currentUser.name]) {
+                delete target.likes[currentUser.name];
+            } else {
+                target.likes[currentUser.name] = true;
+            }
+            updateFirebase();
         }
 
         function createForm(type, pid, cid) {
@@ -477,7 +577,7 @@
             if (!txt) return;
             
             const pin = appData.pins.find(p => p.id === pid);
-            const item = { author: currentUser.name, text: txt, timestamp: Date.now(), id: Date.now().toString() };
+            const item = { author: currentUser.name, text: txt, timestamp: Date.now(), id: Date.now().toString(), likes: {} };
             
             if (type === 'main') pin.mainComment = item;
             else if (type === 'child') { if (!pin.children) pin.children = []; pin.children.push({ ...item, grandchildren: [] }); }
@@ -530,6 +630,58 @@
             a.href = URL.createObjectURL(blob);
             a.download = `backup_${currentRoom}_${timeStr}.json`;
             a.click();
+        }
+
+        /* 【新機能】Excel用 CSV書き出し機能 */
+        function exportCSV() {
+            if (!appData.pins || appData.pins.length === 0) return alert("書き出すデータ（ピン）がありません。");
+            
+            // UTF-8 のBOM（Excelでの日本語文字化け防止用）
+            let csvContent = "\uFEFF"; 
+            csvContent += "ピン番号,フェーズ(色),投稿種別,投稿者,コメント内容,いいね数\n";
+
+            appData.pins.forEach(pin => {
+                const phase = pin.color === 'red' ? '前半' : pin.color === 'orange' ? '中盤' : pin.color === 'limegreen' ? '後半' : '前半';
+                
+                if (pin.mainComment) {
+                    const mainLikes = pin.mainComment.likes ? Object.keys(pin.mainComment.likes).length : 0;
+                    csvContent += `${pin.number},${phase},主コメント,${escapeCSV(pin.mainComment.author)},${escapeCSV(pin.mainComment.text)},${mainLikes}\n`;
+                    
+                    (pin.children || []).forEach(child => {
+                        const childLikes = child.likes ? Object.keys(child.likes).length : 0;
+                        csvContent += `${pin.number},${phase},返信,${escapeCSV(child.author)},${escapeCSV(child.text)},${childLikes}\n`;
+                        
+                        (child.grandchildren || []).forEach(g => {
+                            const gLikes = g.likes ? Object.keys(g.likes).length : 0;
+                            csvContent += `${pin.number},${phase},再返信,${escapeCSV(g.author)},${escapeCSV(g.text)},${gLikes}\n`;
+                        });
+                    });
+                }
+            });
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const date = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const timeStr = `${year}${month}${date}${hours}${minutes}`;
+
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `comments_${currentRoom}_${timeStr}.csv`;
+            a.click();
+        }
+
+        /* CSV用文字列エスケープ処理 */
+        function escapeCSV(val) {
+            if (!val) return "";
+            let str = val.replace(/"/g, '""'); // ダブルクォーテーションをエスケープ
+            if (str.includes(",") || str.includes("\n") || str.includes("\r") || str.includes('"')) {
+                str = `"${str}"`;
+            }
+            return str;
         }
 
         function loadJSON(event) {
