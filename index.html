@@ -25,9 +25,9 @@
         #image-container { position: relative; display: inline-block; transform-origin: top left; }
         #main-image { max-width: none; display: block; }
         
-        /* ピンの基本スタイル（デフォルト赤） */
-        .pin { position: absolute; width: 24px; height: 24px; background: #ef5350; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
-        .pin.active { background: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
+        /* 【バグ修正】 background から background-color に変更し、JSからの色上書きを確実に承諾させる */
+        .pin { position: absolute; width: 24px; height: 24px; background-color: #ef5350; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
+        .pin.active { background-color: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; }
         
         /* コメントエリア */
         #comment-area { height: 40%; background: white; overflow-y: auto; padding: 15px 15px 50px 15px; }
@@ -111,7 +111,7 @@
                 <div id="admin-toolbar" class="hidden">
                     <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
                     
-                    <!-- 【新機能】次に配置するピンの色切り替え（タイムライン連動） -->
+                    <!-- 次に配置するピンの色切り替え（タイムライン連動） -->
                     <div class="color-selector-wrapper">
                         <span style="font-size: 11px; color: #555; font-weight: bold;">📍 次のピン色:</span>
                         <button id="btn-col-red" class="color-btn" style="background:#ef5350;" onclick="setNextPinColor('red')">🔴 前半</button>
@@ -123,6 +123,8 @@
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
                     <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
+                    <!-- 【新機能】部屋の初期化ボタンを追加 -->
+                    <button onclick="clearRoom()" class="action-btn" style="background: #e53935; color: white;">🧹 部屋のデータを初期化</button>
                 </div>
 
                 <!-- 共通ボタン -->
@@ -158,9 +160,15 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // カラーコードの明確なマッピング定義
+        const PIN_COLORS = {
+            red: "#ef5350",
+            orange: "#ff9800",
+            limegreen: "#8bc34a"
+        };
+
         let currentUser = { name: "", role: "" }; 
         let currentRoom = "default";
-        // currentPinColor を追加（デフォルトは前半の赤: red）
         let appData = { imageSrc: "", pins: [], locked: false, inviteCode: "1234", currentPinColor: "red" };
         let activePinId = null;
         let isReviewMode = false;
@@ -243,7 +251,7 @@
 
                 repairDataStructure();
                 updateLockUI();
-                updateColorSelectorUI(); // 追加
+                updateColorSelectorUI();
                 renderApp();
             });
         }
@@ -252,7 +260,7 @@
             if (appData.pins) {
                 if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
                 appData.pins.forEach(pin => {
-                    if (!pin.color) pin.color = 'red'; // 過去データ救済用
+                    if (!pin.color) pin.color = 'red'; 
                     if (!pin.children) pin.children = [];
                     else if (!Array.isArray(pin.children)) pin.children = Object.values(pin.children);
                     pin.children.forEach(child => {
@@ -280,7 +288,6 @@
             if (codeDisplay) codeDisplay.innerText = appData.inviteCode;
         }
 
-        /* 【新機能】管理者の現在の色選択状況をUIに反映 */
         function updateColorSelectorUI() {
             if (currentUser.role !== 'admin') return;
             document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
@@ -288,7 +295,6 @@
             if (activeBtn) activeBtn.classList.add('active');
         }
 
-        /* 【新機能】管理者が次に立てるピンの色を切り替える処理 */
         function setNextPinColor(color) {
             if (isReviewMode || currentUser.role !== 'admin') return;
             appData.currentPinColor = color;
@@ -311,13 +317,11 @@
             db.ref('rooms/' + currentRoom).set(appData); 
         }
 
-        /* 【改修】画像読み込み時に誤操作防止のガードを追加 */
         function loadImage(event) {
             if (isReviewMode) return;
             
-            // 安全策の確認メッセージ
             if (!confirm("新しい画像を読み込みますか？\n（現在配置されているピンやコメントはすべてリセットされます）")) {
-                event.target.value = ""; // 選択をクリア
+                event.target.value = ""; 
                 return;
             }
 
@@ -335,7 +339,7 @@
                     canvas.getContext('2d').drawImage(img, 0, 0, width, height);
                     appData.imageSrc = canvas.toDataURL('image/jpeg', 0.7);
                     appData.pins = [];
-                    appData.currentPinColor = "red"; // 画像変更時は赤に初期化
+                    appData.currentPinColor = "red"; 
                     activePinId = null;
                     updateFirebase();
                 };
@@ -344,13 +348,31 @@
             reader.readAsDataURL(file);
         }
 
-        /* 【改修】タップされた時の色（colorプロパティ）を保存するように拡張 */
+        /* 【新機能】部屋のデータを完全に初期化する（更地に戻す） */
+        function clearRoom() {
+            if (isReviewMode || currentUser.role !== 'admin') return;
+            
+            if (confirm("⚠️ 警告: この部屋のデータを完全に初期化しますか？\n配置された画像、すべてのピン、コメントが完全に消去されます。\n\n※消去する前にバックアップ（JSON保存）を取ることを強くお勧めします。")) {
+                if (confirm("本当に初期化してよろしいですか？（最終確認：この操作は取り消せません）")) {
+                    appData = { 
+                        imageSrc: "", 
+                        pins: [], 
+                        locked: false, 
+                        inviteCode: appData.inviteCode || "1234", 
+                        currentPinColor: "red" 
+                    };
+                    activePinId = null;
+                    updateFirebase();
+                    alert("部屋のデータを初期化しました。");
+                }
+            }
+        }
+
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc || isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) { alert("ロック中のためピンを立てられません。"); return; }
 
             const rect = this.getBoundingClientRect();
-            // 現在のフェーズの色をピンに持たせる（未定義なら赤）
             const chosenColor = appData.currentPinColor || 'red';
 
             appData.pins.push({
@@ -364,7 +386,7 @@
             updateFirebase();
         });
 
-        /* 【改修】保存されたピンの色で描画する（アクティブ時は青に上書き） */
+        /* 【バグ修正】色の流し込み方をカラーコード経由に強化 */
         function renderApp() {
             const imgEl = document.getElementById('main-image');
             if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; } 
@@ -377,9 +399,10 @@
                 el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
                 el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
                 
-                // 【重要】アクティブでなければ、ピンが打たれた時点の色を適用する
+                // 選択中でないピンに、打たれたフェーズに合わせたカラーコードを強制適用
                 if (pin.id !== activePinId) {
-                    el.style.backgroundColor = pin.color || '#ef5350';
+                    const pColor = pin.color || 'red';
+                    el.style.backgroundColor = PIN_COLORS[pColor] || pColor;
                 }
                 
                 el.innerText = pin.number;
@@ -509,13 +532,11 @@
             a.click();
         }
 
-        /* 【改修】データ読み込み時に誤操作防止のガードを追加 */
         function loadJSON(event) {
             if (isReviewMode) return;
 
-            // 安全策の確認メッセージ
             if (!confirm("外部データを読み込みますか？\n（現在編集中の画面データはすべて上書きされます）")) {
-                event.target.value = ""; // 選択をクリア
+                event.target.value = ""; 
                 return;
             }
 
