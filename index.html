@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ワークショップ・マッピングボード (v0.44)</title>
+    <title>画像マッピングコメント機能 (vmcGemi_v045)</title>
     <!-- Firebase SDK v8 -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -19,6 +19,10 @@
         .form-group label { display: block; font-size: 12px; font-weight: bold; color: #555; margin-bottom: 5px; }
         .form-group input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
         .login-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        
+        /* アルバムモードボタン（復元） */
+        .album-btn { width: 100%; margin-top: 15px; padding: 10px; background: #fff; color: #764ba2; border: 2px dashed #764ba2; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: all 0.2s; }
+        .album-btn:hover { background: #f3e5f5; }
 
         /* メイン画面レイアウト */
         #main-container { display: none; flex-direction: column; height: 100vh; }
@@ -30,7 +34,7 @@
         .btn-admin { background: #f3e5f5; color: var(--admin-color); border-color: #d1c4e9; }
         .btn-admin:hover { background: #ede7f6; }
         
-        /* メイン表示領域（マップ ＋ コメント） */
+        /* メイン表示領域 */
         #workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
         
         /* 画像マッピングエリア */
@@ -49,7 +53,7 @@
         /* 同期ステータスバー（最下部） */
         #status-bar { background: #0a2540; color: #9ab4cd; padding: 6px 15px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; z-index: 103; }
 
-        /* ピン・スレッド表現（省略・CSSは前バージョン同様に最適化） */
+        /* ピン・スレッド表現 */
         .pin { position: absolute; width: 26px; height: 26px; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; }
         .pin.active { background-color: #2196F3 !important; transform: translate(-50%, -50%) scale(1.2); z-index: 11; box-shadow: 0 0 12px #2196F3; opacity: 1 !important; display: flex !important; }
         .comment-block { border: 1px solid var(--border); padding: 8px; margin-bottom: 8px; border-radius: 4px; background: #fff; position: relative; }
@@ -63,24 +67,26 @@
         .input-box { display: flex; gap: 5px; margin-top: 5px; }
         .input-box input { flex:1; padding: 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; }
         
-        /* 新設：AIサクラボタンの専用スタイル */
+        /* AIサクラ（サンプル投入）ボタン */
         .btn-ai-inject { background: #f3e5f5; color: #673AB7; border: 1px dashed #673AB7; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; margin-left: 10px; }
         .btn-ai-inject:hover { background: #e1bee7; }
         
         input[type="file"] { display: none; }
-        .phase-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; }
     </style>
 </head>
 <body>
 
-    <!-- 1. ログイン画面 -->
+    <!-- 1. ログイン画面（タイトルを「画像マッピングコメント機能」へ先祖返り） -->
     <div id="login-screen">
         <div class="login-box">
-            <h2 style="text-align:center; margin-bottom: 20px; color:#333;">🗺️ WSマッピングボード</h2>
+            <h2 style="text-align:center; margin-bottom: 20px; color:#333; font-size: 20px;">🗺️ 画像マッピングコメント機能</h2>
             <div class="form-group"><label>あなたの表示名</label><input type="text" id="input-name" placeholder="自由に入力（例：たろう）"></div>
             <div class="form-group"><label>部屋名（スペースの識別）</label><input type="text" id="input-room" placeholder="例：防犯A班"></div>
             <div class="form-group"><label>招待コード（またはADMIN123）</label><input type="text" id="input-code" placeholder="4桁のコードを入力"></div>
             <button class="login-btn" onclick="tryLogin()">入室する 🚪</button>
+            
+            <!-- 🎒 アルバムモード呼び出し口（完全復活） -->
+            <label class="album-btn">🎒 アルバムモードで振り返る<input type="file" id="album-file" accept=".json" onchange="loadAlbumMode(event)"></label>
         </div>
     </div>
 
@@ -108,7 +114,7 @@
                 <span id="txt-current-color" style="font-size:12px; font-weight:bold; color:#ef5350;">(赤)</span>
             </div>
 
-            <div style="flex-grow: 1;"></div> <!-- 右寄せ用バッファ -->
+            <div style="flex-grow: 1;"></div>
 
             <!-- 管理者用データ出力・管理（管理者限定） -->
             <button id="admin-csv-btn" class="btn btn-admin" style="display:none;" onclick="exportToCSV()">📊 CSV書き出し</button>
@@ -116,12 +122,12 @@
             <button id="admin-lock-btn" class="btn btn-admin" style="display:none;" onclick="toggleRoomLock()">🔓 ロック:OFF</button>
             <button id="admin-clear-btn" class="btn btn-admin" style="display:none; color:#c62828;" onclick="clearRoomData()">🧹 初期化</button>
             
-            <button class="btn" onclick="location.reload()">退室 🚪</button>
+            <!-- 🚪 即時退出ボタン（専用の安全な退室処理へルーティング） -->
+            <button class="btn" onclick="logout()">退室 🚪</button>
         </div>
 
         <!-- メインコンテンツ -->
         <div id="workspace">
-            <!-- マップエリア -->
             <div id="image-area" onclick="handleMapClick(event)">
                 <div id="image-container">
                     <img id="map-image" src="" alt="背景マップ（画像が読み込まれるとここに表示されます）">
@@ -129,21 +135,21 @@
                 </div>
             </div>
             
-            <!-- フロート配置：全体見渡しボタン -->
+            <!-- 全体見渡しボタン -->
             <button id="float-view-toggle" onclick="togglePinVisibility()">📍 ピン: 表示中</button>
 
             <!-- コメントエリア -->
             <div id="comment-area">
                 <div id="comment-header">
                     <span id="comment-title">📍 ピンを選択してください</span>
-                    <!-- 💡 転用：AIサクラ（サンプル意見）投入ボタン（管理者画面かつ未書き込みのピンで出現） -->
+                    <!-- 🤖 AIサクラ（サンプル意見）投入ボタン -->
                     <button id="ai-inject-btn" class="btn-ai-inject" style="display:none;" onclick="injectAISampleComments()">🤖 サンプル意見を投入</button>
                 </div>
                 <div id="comment-list"></div>
             </div>
         </div>
 
-        <!-- ステータスバー（最下部） -->
+        <!-- ステータスバー -->
         <div id="status-bar">
             <div>ユーザー: <b id="status-user">-</b> | 権限: <b id="status-role">-</b></div>
             <div id="status-sync">🔄 Firebaseと同期中...</div>
@@ -151,7 +157,7 @@
     </div>
 
     <script>
-        // --- Firebase初期化（お手持ちの有効なキーに差し替えてください） ---
+        // --- Firebase初期化（有効なキーに差し替えてください） ---
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY",
             authDomain: "YOUR_AUTH_DOMAIN",
@@ -164,55 +170,65 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // アプリ内グローバル状態
+        // グローバル状態
         const PIN_COLORS = { red: "#ef5350", orange: "#ff9800", limegreen: "#8bc34a" };
         let myProfile = { name: "", room: "", role: "user" };
         let roomState = { config: {}, pins: {} };
         let activePinId = null;
-        let pinVisibilityState = 'normal'; // normal, semi, hidden
+        let pinVisibilityState = 'normal';
 
-        // 安全なハイブリッドID生成（タイムスタンプ + ランダム5桁）
+        // 安全なハイブリッドID生成
         function generateUniqueId() {
-            const ts = Date.now();
-            const rnd = Math.random().toString(36).substring(2, 7);
-            return `${ts}_${rnd}`;
+            return `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         }
 
-        // ログイン処理
+        // ログイン処理（クラッシュ防止用のエラーハンドリング完全配備）
         function tryLogin() {
-            const name = document.getElementById('input-name').value.trim();
-            const room = document.getElementById('input-room').value.trim();
-            const code = document.getElementById('input-code').value.trim();
+            try {
+                const name = document.getElementById('input-name').value.trim();
+                const room = document.getElementById('input-room').value.trim();
+                const code = document.getElementById('input-code').value.trim();
 
-            if(!name || !room || !code) { alert("すべての項目を入力してください。"); return; }
+                if(!name || !room || !code) { alert("すべての項目を入力してください。"); return; }
 
-            myProfile.name = name;
-            myProfile.room = room;
+                myProfile.name = name;
+                myProfile.room = room;
 
-            if(code === "ADMIN123") {
-                myProfile.role = "admin";
-                bootApp();
-            } else {
-                // データベースから部屋の現在のコードを取得して認証
-                db.ref(`rooms/${room}/config/userCode`).once('value', (snap) => {
-                    const currentCode = snap.val() || "1234"; // デフォルト初期値
-                    if(code === currentCode.toString()) {
-                        myProfile.role = "user";
-                        bootApp();
-                    } else {
-                        alert("招待コードが正しくありません。");
-                    }
-                });
+                if(code === "ADMIN123") {
+                    myProfile.role = "admin";
+                    bootApp();
+                } else {
+                    // データベースから部屋の現在のコードを取得して認証
+                    db.ref(`rooms/${room}/config/userCode`).once('value').then((snap) => {
+                        const currentCode = snap.val() || "1234";
+                        if(code === currentCode.toString()) {
+                            myProfile.role = "user";
+                            bootApp();
+                        } else {
+                            alert("招待コードが正しくありません。");
+                        }
+                    }).catch((err) => {
+                        // セキュリティルール等で一度目の読み込みが弾かれた場合の安全フォールバック
+                        if(code === "1234") {
+                            myProfile.role = "user";
+                            bootApp();
+                        } else {
+                            alert("入室エラーが発生しました。コードを確認してください。");
+                        }
+                    });
+                }
+            } catch (e) {
+                alert("ログイン処理の起動に失敗しました: " + e.message);
             }
         }
 
-        // アプリ起動と同期開始
+        // アプリ起動とリアルタイム同期
         function bootApp() {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-container').style.display = 'flex';
             
             document.getElementById('status-user').innerText = myProfile.name;
-            document.getElementById('status-role').innerText = myProfile.role === 'admin' ? '管理者' : '参加者';
+            document.getElementById('status-role').innerText = myProfile.role === 'admin' ? '管理者' : (myProfile.role === 'viewer' ? '閲覧専用' : '参加者');
             document.getElementById('room-title').innerText = `🏠 部屋: ${myProfile.room}`;
 
             if(myProfile.role === 'admin') {
@@ -223,14 +239,12 @@
             db.ref(`rooms/${myProfile.room}`).on('value', (snap) => {
                 const data = snap.val() || {};
                 
-                // データ構造の自動補修（リペア）
                 if(!data.config) data.config = {};
                 if(!data.config.nextColor) data.config.nextColor = 'red';
                 if(!data.config.userCode) data.config.userCode = '1234';
                 if(!data.config.isLocked) data.config.isLocked = false;
                 if(!data.pins) data.pins = {};
                 
-                // Firebaseの配列化バグをオブジェクトに再シリアライズ
                 if(Array.isArray(data.pins)) {
                     const obj = {};
                     data.pins.forEach((p, idx) => { if(p) { if(!p.id) p.id = idx; obj[p.id] = p; } });
@@ -241,6 +255,72 @@
                 renderApp();
                 document.getElementById('status-sync').innerText = "✅ 同期完了";
             });
+        }
+
+        // 🚪 即時退室から元のログイン画面へ瞬時に戻る処理
+        function logout() {
+            try {
+                // Firebaseの通信リスナーを安全に解除
+                if (myProfile.room && myProfile.role !== 'viewer') {
+                    db.ref(`rooms/${myProfile.room}`).off();
+                }
+                
+                // 状態変数の完全クリア
+                myProfile = { name: "", room: "", role: "user" };
+                roomState = { config: {}, pins: {} };
+                activePinId = null;
+                pinVisibilityState = 'normal';
+                
+                // 招待コード入力欄だけセキュリティのためクリア
+                document.getElementById('input-code').value = '';
+                document.getElementById('float-view-toggle').innerText = '📍 ピン: 表示中';
+                
+                // 管理者専用のボタン群を非表示に戻す
+                document.querySelectorAll('[id^="admin-"]').forEach(el => el.style.display = 'none');
+                
+                // 画面表示を一瞬で切り替える（即時退出）
+                document.getElementById('main-container').style.display = 'none';
+                document.getElementById('login-screen').style.display = 'flex';
+            } catch(e) {
+                // 念のための強制リロードフォールバック
+                location.reload();
+            }
+        }
+
+        // 🎒 アルバムモード（完全オフライン振り返り）の起動処理
+        function loadAlbumMode(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    const rawData = parsed.appData || parsed; // バックアップのネスト構造を自動吸収
+                    
+                    myProfile.name = "閲覧者 (アルバム)";
+                    myProfile.room = parsed.roomName || "ローカル保存データ";
+                    myProfile.role = "viewer"; 
+                    
+                    roomState = rawData;
+                    
+                    // UIをアルバム振り返り用に書き換えてメイン画面を即時展開
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('main-container').style.display = 'flex';
+                    
+                    document.getElementById('room-title').innerText = `🎒 アルバム: ${myProfile.room} (${parsed.exportedAt || '記録日時不明'})`;
+                    document.getElementById('status-user').innerText = myProfile.name;
+                    document.getElementById('status-role').innerText = "閲覧専用";
+                    document.getElementById('status-sync').innerText = "📂 ローカルファイルを展開中 (完全オフライン)";
+                    
+                    document.querySelectorAll('[id^="admin-"]').forEach(el => el.style.display = 'none');
+                    
+                    renderApp();
+                } catch(err) {
+                    alert("JSONファイルの解析に失敗しました。正しいバックアップファイルを選択してください。");
+                }
+            };
+            reader.readAsText(file);
         }
 
         // 管理者：次のピン色を変更
@@ -256,11 +336,10 @@
 
         // 管理者：編集ロック切り替え
         function toggleRoomLock() {
-            const nextState = !roomState.config.isLocked;
-            db.ref(`rooms/${myProfile.room}/config/isLocked`).set(nextState);
+            db.ref(`rooms/${myProfile.room}/config/isLocked`).set(!roomState.config.isLocked);
         }
 
-        // 管理者：画像アップロード＆自動最適化（横幅1000px/JPEG70%）
+        // 管理者：画像アップロード＆自動最適化（readAsDataURLへ完全修正済）
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if(!file) return;
@@ -275,15 +354,14 @@
                     canvas.width = w; canvas.height = h;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, w, h);
-                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                    db.ref(`rooms/${myProfile.room}/imageSrc`).set(compressedDataUrl);
+                    db.ref(`rooms/${myProfile.room}/imageSrc`).set(canvas.toDataURL('image/jpeg', 0.7));
                 };
                 img.src = e.target.result;
             };
-            reader.readAsText(file);
+            reader.readAsDataURL(file); // 修正完了
         }
 
-        // ピン全体見渡しトグル（表示 ➔ 半透明 ➔ 非表示）
+        // ピン全体見渡しトグル
         function togglePinVisibility() {
             const btn = document.getElementById('float-view-toggle');
             if (pinVisibilityState === 'normal') { pinVisibilityState = 'semi'; btn.innerText = '📍 ピン: 半透明'; }
@@ -292,8 +370,9 @@
             renderApp();
         }
 
-        // マップクリック時のピン設置（部分通信トランザクション処理）
+        // マップクリック時のピン設置（部分通信トランザクション）
         function handleMapClick(e) {
+            if(myProfile.role === 'viewer') return;
             if(roomState.config.isLocked && myProfile.role !== 'admin') { alert("現在、管理者が書き込みをロックしています。"); return; }
             if(e.target.id !== 'map-image' && e.target.id !== 'image-area') return;
 
@@ -302,10 +381,7 @@
             const y = ((e.clientY - rect.top) / rect.height) * 100;
 
             const newPinId = generateUniqueId();
-            const pinRef = db.ref(`rooms/${myProfile.room}/pins/${newPinId}`);
-
-            // 画像データを含まない、pinsノードのみの独立トランザクション
-            pinRef.transaction((currentData) => {
+            db.ref(`rooms/${myProfile.room}/pins/${newPinId}`).transaction((currentData) => {
                 if (currentData === null) {
                     const pinCount = Object.keys(roomState.pins || {}).length + 1;
                     return {
@@ -318,16 +394,15 @@
                         children: {}
                     };
                 }
-                return; // 既に存在すれば何もしない
-            }, (error, committed, snapshot) => {
+                return;
+            }, (error, committed) => {
                 if (committed) { activePinId = newPinId; }
             });
         }
 
-        // 💡 転用：AIサクラ（サンプル意見）投入ロジック（超軽量トランザクション直撃）
+        // 🤖 サンプル意見（旧3人同時テスト）を投入するファシリテーション支援ロジック
         function injectAISampleComments() {
             if (!activePinId || myProfile.role !== 'admin') return;
-            
             const targetPinRef = db.ref(`rooms/${myProfile.room}/pins/${activePinId}`);
             
             const samples = [
@@ -336,36 +411,29 @@
                 { author: "🤖 AI視点③ (行政・防災)", text: "避難経路のシミュレーションにおいて、この周辺は道幅の狭さがボトルネックとなる恐れがあるため、空地の確保や誘導標識の整備が望まれます。" }
             ];
 
-            // 5ミリ秒間隔の高速3連打で部分通信トランザクションを叩き、データ整合性を保ちながら一瞬でスレッドを構築
             samples.forEach((sample, index) => {
                 setTimeout(() => {
                     targetPinRef.transaction((pin) => {
                         if (!pin) return pin;
-                        
                         if (index === 0) {
-                            // 1つ目は主コメントとして格納
-                            if (!pin.mainComment) {
-                                pin.mainComment = { author: sample.author, text: sample.text, likes: {} };
-                            }
+                            if (!pin.mainComment) pin.mainComment = { author: sample.author, text: sample.text, likes: {} };
                         } else {
-                            // 2つ目、3つ目は子コメント（返信）として格納
                             if (!pin.children) pin.children = {};
                             const childId = generateUniqueId();
                             pin.children[childId] = { id: childId, author: sample.author, text: sample.text, likes: {}, grandchildren: {} };
                         }
                         return pin;
                     });
-                }, index * 5); // 5ms間隔の超高速アタック
+                }, index * 5); // 5ms間隔の超高速トランザクションアタックを維持
             });
         }
 
-        // コメント・いいね！等の各階層アクション（部分通信トランザクションで競合を完全回避）
+        // コメント・いいねアクション（部分通信トランザクション）
         function handleCommentAction(type, path, extra = {}) {
+            if(myProfile.role === 'viewer') return;
             if(roomState.config.isLocked && myProfile.role !== 'admin' && type !== 'like') { alert("現在ロック中です。"); return; }
             
-            const ref = db.ref(`rooms/${myProfile.room}/pins/${activePinId}${path}`);
-            
-            ref.transaction((data) => {
+            db.ref(`rooms/${myProfile.room}/pins/${activePinId}${path}`).transaction((data) => {
                 if(type === 'post') {
                     const newId = generateUniqueId();
                     if(!data) data = {};
@@ -377,8 +445,8 @@
                 }
                 if(type === 'like') {
                     if(!data) data = {};
-                    if(data[myProfile.name]) { delete data[myProfile.name]; } 
-                    else { data[myProfile.name] = true; }
+                    if(data[myProfile.name]) delete data[myProfile.name];
+                    else data[myProfile.name] = true;
                     return data;
                 }
                 if(type === 'edit') {
@@ -386,29 +454,26 @@
                     data.text = extra.text;
                     return data;
                 }
-                if(type === 'delete') {
-                    return null; // ノード削除
-                }
+                if(type === 'delete') return null;
                 return data;
             });
         }
 
-        // UI描画処理
+        // 全体レンダリング
         function renderApp() {
-            // 管理者メタ情報反映
-            document.getElementById('txt-user-code').innerText = roomState.config.userCode;
-            document.getElementById('admin-lock-btn').innerText = roomState.config.isLocked ? "🔒 ロック:ON" : "🔓 ロック:OFF";
-            document.getElementById('admin-lock-btn').style.background = roomState.config.isLocked ? "#ffebee" : "#white";
-            
-            const cColor = roomState.config.nextColor || 'red';
-            const colorJP = { red: '(赤)', orange: '(橙)', limegreen: '(緑)' };
-            document.getElementById('txt-current-color').innerText = colorJP[cColor];
-            document.getElementById('txt-current-color').style.color = PIN_COLORS[cColor];
+            if(myProfile.role !== 'viewer') {
+                document.getElementById('txt-user-code').innerText = roomState.config.userCode;
+                document.getElementById('admin-lock-btn').innerText = roomState.config.isLocked ? "🔒 ロック:ON" : "🔓 ロック:OFF";
+                document.getElementById('admin-lock-btn').style.background = roomState.config.isLocked ? "#ffebee" : "white";
+                
+                const cColor = roomState.config.nextColor || 'red';
+                const colorJP = { red: '(赤)', orange: '(橙)', limegreen: '(緑)' };
+                document.getElementById('txt-current-color').innerText = colorJP[cColor];
+                document.getElementById('txt-current-color').style.color = PIN_COLORS[cColor];
+            }
 
-            // 背景画像
             document.getElementById('map-image').src = roomState.imageSrc || "";
 
-            // ピン描画
             const pContainer = document.getElementById('pins-container');
             pContainer.innerHTML = '';
             
@@ -432,7 +497,7 @@
             renderCommentsUI();
         }
 
-        // コメント欄UI描画
+        // 掲示板UIレンダリング
         function renderCommentsUI() {
             const listEl = document.getElementById('comment-list');
             const titleEl = document.getElementById('comment-title');
@@ -450,34 +515,34 @@
 
             titleEl.innerText = `📌 No.${pin.number} の掲示板 (${pin.color === 'red' ? '前半' : pin.color === 'orange' ? '中盤' : '後半'})`;
             
-            // 管理者かつ、まだ主コメントが一度も書き込まれていないクリーンなピンの場合に「サンプル意見投入」ボタンを表示
             if(myProfile.role === 'admin' && !pin.mainComment) {
                 aiBtn.style.display = 'inline-block';
             }
 
             let html = '';
 
-            // 1階層目：主コメント
             if(!pin.mainComment) {
-                html += `
-                    <div style="padding:10px; text-align:center; border:1px dashed #ccc;">
-                        <p style="font-size:12px; color:#666; margin-bottom:5px;">この場所への最初のコメントを書き込みましょう</p>
-                        <div class="input-box">
-                            <input type="text" id="input-main" placeholder="150文字以内で気づきを入力..." maxlength="150">
-                            <button class="btn" onclick="let val=document.getElementById('input-main').value; if(val.trim()){ handleCommentAction('postMain', '/mainComment', {text:val}); }">投稿</button>
+                if(myProfile.role === 'viewer') {
+                    html += '<p style="text-align:center;color:#888;padding:20px;">コメントはありません</p>';
+                } else {
+                    html += `
+                        <div style="padding:10px; text-align:center; border:1px dashed #ccc;">
+                            <p style="font-size:12px; color:#666; margin-bottom:5px;">この場所への最初のコメントを書き込みましょう</p>
+                            <div class="input-box">
+                                <input type="text" id="input-main" placeholder="150文字以内で気づきを入力..." maxlength="150">
+                                <button class="btn" onclick="let val=document.getElementById('input-main').value; if(val.trim()){ handleCommentAction('postMain', '/mainComment', {text:val}); }">投稿</button>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             } else {
                 html += renderCommentBlock(pin.mainComment, '/mainComment', 1);
                 
-                // 2階層目（子返信リスト）
                 const children = pin.children ? Object.values(pin.children) : [];
                 children.forEach(c => {
                     html += `<div class="child-indent">`;
                     html += renderCommentBlock(c, `/children/${c.id}`, 2);
                     
-                    // 3階層目（孫返信リスト）
                     const grandchildren = c.grandchildren ? Object.values(c.grandchildren) : [];
                     grandchildren.forEach(g => {
                         html += `<div class="grandchild-indent">`;
@@ -485,8 +550,7 @@
                         html += `</div>`;
                     });
 
-                    // 孫への投稿フォーム（子コメントの最大数10件未満の場合）
-                    if(grandchildren.length < 10) {
+                    if(grandchildren.length < 10 && myProfile.role !== 'viewer') {
                         html += `
                             <div class="input-box grandchild-indent">
                                 <input type="text" id="in-${c.id}" placeholder="再返信を入力..." maxlength="150">
@@ -497,8 +561,7 @@
                     html += `</div>`;
                 });
 
-                // 子への投稿フォーム（主コメントが存在し、かつ子コメントが10件未満の場合）
-                if(children.length < 10) {
+                if(children.length < 10 && pin.mainComment && myProfile.role !== 'viewer') {
                     html += `
                         <div class="input-box child-indent" style="margin-top:10px;">
                             <input type="text" id="input-child-main" placeholder="この意見への返信を入力..." maxlength="150">
@@ -511,7 +574,7 @@
             listEl.innerHTML = html;
         }
 
-        // コメント単体ブロックHTML生成
+        // コメント単体パーツ生成
         function renderCommentBlock(item, path, depth) {
             const likes = item.likes || {};
             const likeCount = Object.keys(likes).length;
@@ -519,9 +582,10 @@
             
             const isMyPost = item.author === myProfile.name;
             const isAdmin = myProfile.role === 'admin';
+            const isViewer = myProfile.role === 'viewer';
             
             let actionLinks = '';
-            if(isMyPost || isAdmin) {
+            if((isMyPost || isAdmin) && !isViewer) {
                 actionLinks += `<span class="action-link" onclick="let val=prompt('コメントを修正:', '${item.text}'); if(val!==null && val.trim()){ handleCommentAction('edit', '${path}', {text:val}); }">修正</span>`;
                 actionLinks += `<span class="action-link del" onclick="if(confirm('本当に削除しますか？')){ handleCommentAction('delete', '${path}'); }">削除</span>`;
             }
@@ -530,14 +594,14 @@
                 <div class="comment-block">
                     <div class="comment-meta">
                         <span><b>${item.author}</b> ${actionLinks}</span>
-                        <button class="like-btn" onclick="handleCommentAction('like', '${path}/likes')">${hasLiked} ${likeCount}</button>
+                        <button class="like-btn" ${isViewer ? 'disabled' : ''} onclick="handleCommentAction('like', '${path}/likes')">${hasLiked} ${likeCount}</button>
                     </div>
                     <div class="comment-text">${item.text}</div>
                 </div>
             `;
         }
 
-        // 管理者：Excel用CSVエクスポート（BOM付きUTF-8）
+        // 管理者：Excel用CSVエクスポート
         function exportToCSV() {
             let csv = '\uFEFFピン番号,フェーズ(色),階層,投稿者,コメント内容,いいね数\n';
             Object.values(roomState.pins).forEach(p => {
@@ -595,7 +659,7 @@
             if(confirm("【警告】部屋のすべてのデータを完全に削除します。よろしいですか？")) {
                 if(confirm("本当に最終確認です。元に戻せませんが初期化しますか？")) {
                     db.ref(`rooms/${myProfile.room}`).remove().then(() => {
-                        location.reload();
+                        logout();
                     });
                 }
             }
