@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (vmcGemi_v047)</title>
+    <title>画像マッピングコメント機能 (vmcGemi_v047_fixed)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -404,6 +404,18 @@
             const pin = appData.pins.find(p => p.id === activePinId);
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666; padding: 20px 0;">ピンを選択するとコメントが表示されます</p>'; return; }
             
+            // 🌟 【超強化バグ対策】画面描き直し前に、各フォームの入力途中の文字と、どこに入力していたか(フォーカス)を一時退避
+            let savedMainText = document.getElementById(`in-main-${pin.id}`)?.value || "";
+            let savedChildText = document.getElementById(`in-child-${pin.id}`)?.value || "";
+            let savedGrandTexts = {};
+            if (pin.children) {
+                pin.children.forEach(c => {
+                    const el = document.getElementById(`in-grand-${c.id}`);
+                    if (el) savedGrandTexts[c.id] = el.value;
+                });
+            }
+            let focusedId = document.activeElement?.id;
+
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
             if (!isReviewMode) {
                 if (currentUser.role === 'admin') { html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ 管理者権限で削除</button>`; } 
@@ -426,6 +438,47 @@
                 if ((pin.children || []).length < 10) { if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('child', pin.id, null); }
             }
             container.innerHTML = html;
+
+            // 🌟 【超強化バグ対策】描き直し完了後、退避していた入力内容を完全復元
+            if (savedMainText) {
+                const mainEl = document.getElementById(`in-main-${pin.id}`);
+                if (mainEl) {
+                    mainEl.value = savedMainText;
+                    validateComment(`in-main-${pin.id}`, `counter-in-main-${pin.id}`, `btn-in-main-${pin.id}`);
+                } else {
+                    // 💡 主コメントの入力中に他人に先を越された場合は、自動的に新設された返信欄(child)へ文字をスマートスライド移行
+                    const childEl = document.getElementById(`in-child-${pin.id}`);
+                    if (childEl) {
+                        childEl.value = savedMainText;
+                        validateComment(`in-child-${pin.id}`, `counter-in-child-${pin.id}`, `btn-in-child-${pin.id}`);
+                        if (focusedId === `in-main-${pin.id}`) focusedId = `in-child-${pin.id}`; // フォーカス対象も自動追従
+                    }
+                }
+            }
+            if (savedChildText) {
+                const childEl = document.getElementById(`in-child-${pin.id}`);
+                if (childEl) {
+                    childEl.value = savedChildText;
+                    validateComment(`in-child-${pin.id}`, `counter-in-child-${pin.id}`, `btn-in-child-${pin.id}`);
+                }
+            }
+            Object.keys(savedGrandTexts).forEach(cid => {
+                const grandEl = document.getElementById(`in-grand-${cid}`);
+                if (grandEl) {
+                    grandEl.value = savedGrandTexts[cid];
+                    validateComment(`in-grand-${cid}`, `counter-in-grand-${cid}`, `btn-in-grand-${cid}`);
+                }
+            });
+
+            // 💡 入力中だったフォームにフォーカスを戻し、カーソル位置を文字の末尾へ戻すおもてなし処理
+            if (focusedId) {
+                const focusedEl = document.getElementById(focusedId);
+                if (focusedEl) {
+                    focusedEl.focus();
+                    const len = focusedEl.value.length;
+                    focusedEl.setSelectionRange(len, len);
+                }
+            }
         }
 
         function renderItem(item, type, pid, cid, gid) {
@@ -515,7 +568,6 @@
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
             
-            // 🌟 ボタンの文言を「⚙️ 競合シミュレーション」に変え、デザインを落ち着いたブルーグレーに統合しました。
             const testBtn = (type === 'main' && currentUser.role === 'admin') ? 
                 `<button onclick="runSimultaneousTest('${pid}')" style="height: 36px; padding: 0 10px; background: #546e7a; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; white-space: nowrap; margin-left:5px;">⚙️ 競合シミュレーション</button>` : '';
 
@@ -573,10 +625,11 @@
         function runSimultaneousTest(pid) {
             if (isReviewMode) return;
             const originalUser = currentUser.name;
+            // 🌟 3人のセリフをご指定通りのユーモア溢れるテキストに完全刷新しました
             const testUsers = [
                 { name: "🎯 爆速のAさん", text: "タッチの差で私が主コメントを勝ち取るはず！" },
-                { name: "⚡ 同時のBさん", text: "一瞬遅れましたが無事にスライドされるはず。" },
-                { name: "🐾 同時のCさん", text: "3人目でもめげずに返信を大実験！" }
+                { name: "⚡ 同時のBさん", text: "一瞬遅れて自動スライドされるはずの意見です。" },
+                { name: "🐾 同時のCさん", text: "めげずに3番目でも投稿が通るかどうかの大実験！" }
             ];
             
             testUsers.forEach((u, idx) => {
