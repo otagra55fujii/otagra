@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v040)</title>
+    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v041)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -408,21 +408,24 @@
 
             const rect = this.getBoundingClientRect();
             const chosenColor = appData.currentPinColor || 'red';
+            const newId = Date.now().toString();
 
             appData.pins.push({
-                id: Date.now().toString(),
+                id: newId,
                 number: appData.pins.length + 1,
                 x: ((e.clientX - rect.left) / rect.width) * 100,
                 y: ((e.clientY - rect.top) / rect.height) * 100,
                 color: chosenColor, 
                 mainComment: null, 
                 children: [],
-                createdBy: currentUser.name // 【追加】ピンの誤タップ救済判定用に制作者を記録
+                createdBy: currentUser.name 
             });
+            
+            /* 【修正】ピンを設置した瞬間に、そのピンを自動的に「選択（アクティブ）」状態にする */
+            activePinId = newId; 
             updateFirebase();
         });
 
-        /* ピン表示切り替えの反映と、フロート表示の制御 */
         function renderApp() {
             const imgEl = document.getElementById('main-image');
             const pinToggleBtn = document.getElementById('btn-pin-toggle');
@@ -430,7 +433,7 @@
             if (appData.imageSrc) { 
                 imgEl.src = appData.imageSrc; 
                 imgEl.style.display = 'block'; 
-                pinToggleBtn.classList.remove('hidden'); // 画像があればピン表示ボタンを出現させる
+                pinToggleBtn.classList.remove('hidden'); 
             } else { 
                 imgEl.style.display = 'none'; 
                 imgEl.src = ""; 
@@ -444,12 +447,10 @@
                 el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
                 el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
                 
-                // 選択中でないピンの色をマッピング通りに適用
                 if (pin.id !== activePinId) {
                     const pColor = pin.color || 'red';
                     el.style.backgroundColor = PIN_COLORS[pColor] || pColor;
                     
-                    // 全体見渡しモード（半透明・非表示）の反映
                     if (pinVisibilityState === 'semi') {
                         el.style.opacity = '0.15';
                     } else if (pinVisibilityState === 'hidden') {
@@ -471,7 +472,6 @@
             
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
             
-            // 【修正】ピンの誤タップ救済機能（案A）の表示ロジック
             if (!isReviewMode) {
                 const hasComments = pin.mainComment !== null;
                 const isCreator = pin.createdBy === currentUser.name;
@@ -479,7 +479,6 @@
                 if (currentUser.role === 'admin') {
                     html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ 管理者権限で削除</button>`;
                 } else if (isCreator && !hasComments) {
-                    // 一般ユーザーでも「自分が立てたピン」かつ「コメント無し」なら即時削除可能
                     html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">❌ このピンを削除する</button>`;
                 }
             }
@@ -511,26 +510,27 @@
             container.innerHTML = html;
         }
 
-        /* 「いいね！スタンプ」を反映したコメント描画 */
+        /* コメント単体の描画ロジック */
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
             const canEdit = ((currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked)) && !isReviewMode;
-            const editBtn = canEdit ? `<button onclick="editItem('${pid}','${type}',${cidArg},${gidArg})">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
             
-            // いいね！の解析と描画
+            // 【変更】インライン編集フォームに切り替えるため、一意のDOM要素IDを生成
+            const itemId = `item-${pid}-${type}-${cid || 'none'}-${gid || 'none'}`;
+            const editBtn = canEdit ? `<button onclick="startEdit('${pid}','${type}',${cidArg},${gidArg}, '${itemId}')">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
+            
             const likesObj = item.likes || {};
             const likeCount = Object.keys(likesObj).length;
             const hasLiked = !!likesObj[currentUser.name];
             const likeBtnLabel = hasLiked ? `❤️ ${likeCount}` : `🤍 ${likeCount}`;
             const likeBtnClass = hasLiked ? 'liked' : '';
             
-            // 閲覧モードやロック時はいいねを押せない
             const canLike = !isReviewMode && (currentUser.role === 'admin' || !appData.locked);
             const likeDisabledAttr = canLike ? '' : 'disabled style="cursor: not-allowed; opacity: 0.6;"';
 
             return `
-                <div class="comment-block">
+                <div class="comment-block" id="${itemId}">
                     <div class="comment-header">
                         <span><b>${item.author}</b></span>
                         <button class="like-btn ${likeBtnClass}" ${likeDisabledAttr} onclick="toggleLike('${pid}','${type}',${cidArg},${gidArg})">${likeBtnLabel}</button>
@@ -541,7 +541,89 @@
             `;
         }
 
-        /* 「いいね！」スタンプのトグル処理 */
+        /* 【追加】コメントの「インライン修正フォーム」を展開する関数 */
+        function startEdit(pid, type, cid, gid, itemId) {
+            const pin = appData.pins.find(p => p.id === pid);
+            let target;
+            if (type === 'main') target = pin.mainComment;
+            else if (type === 'child') target = pin.children.find(c => c.id === cid);
+            else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
+            
+            if (!target) return;
+
+            const block = document.getElementById(itemId);
+            const originalText = target.text;
+            const currentCount = [...originalText].length; // 絵文字対応カウント
+
+            const cidArg = cid ? `'${cid}'` : 'null';
+            const gidArg = gid ? `'${gid}'` : 'null';
+
+            // コメントブロックの内側をテキストエリアとカウンター付きフォームに動的書き換え
+            block.innerHTML = `
+                <div class="comment-header">
+                    <span><b>${target.author} (編集推敲中)</b></span>
+                </div>
+                <div class="add-comment-form" style="margin-top:5px;">
+                    <textarea id="edit-txt-${itemId}" oninput="validateEdit('edit-txt-${itemId}', 'edit-counter-${itemId}', 'edit-btn-${itemId}')" style="height:60px;">${originalText}</textarea>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
+                    <div id="edit-counter-${itemId}" style="font-size:11px; color:#666;">${currentCount} / 150文字</div>
+                    <div>
+                        <button id="edit-btn-${itemId}" onclick="saveEdit('${pid}','${type}',${cidArg},${gidArg},'edit-txt-${itemId}')" style="padding:4px 10px; background:var(--primary); color:white; border:none; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">保存</button>
+                        <button onclick="renderComments()" style="padding:4px 10px; background:#757575; color:white; border:none; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; margin-left:4px;">キャンセル</button>
+                    </div>
+                </div>
+            `;
+            
+            // 初回表示時のカウンターバリデーションを適用
+            validateEdit(`edit-txt-${itemId}`, `edit-counter-${itemId}`, `edit-btn-${itemId}`);
+        }
+
+        /* 【追加】修正用テキストエリアの絵文字対応リアルタイムバリデーション */
+        function validateEdit(textareaId, counterId, buttonId) {
+            const textarea = document.getElementById(textareaId);
+            const counter = document.getElementById(counterId);
+            const button = document.getElementById(buttonId);
+            if (!textarea || !counter || !button) return;
+            
+            const text = textarea.value;
+            const count = [...text].length; 
+            
+            counter.textContent = `${count} / 150文字`;
+            
+            if (count > 0 && count <= 150) {
+                counter.style.color = '#666';
+                button.disabled = false;
+                button.style.backgroundColor = 'var(--primary)';
+            } else {
+                counter.style.color = count > 150 ? '#d9534f' : '#666'; 
+                button.disabled = true;
+                button.style.backgroundColor = '#ccc';
+            }
+        }
+
+        /* 【追加】修正したコメントを保存して同期する関数 */
+        function saveEdit(pid, type, cid, gid, textareaId) {
+            if (isReviewMode) return;
+            const txt = document.getElementById(textareaId).value.trim();
+            if (!txt) return;
+
+            const pin = appData.pins.find(p => p.id === pid);
+            let target;
+            if (type === 'main') target = pin.mainComment;
+            else if (type === 'child') target = pin.children.find(c => c.id === cid);
+            else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
+            
+            if (!target) return;
+            
+            // サーバー送信前の最終文字数チェック
+            const count = [...txt].length;
+            if (count > 150) return alert("150文字を超えているため保存できません。");
+
+            target.text = txt;
+            updateFirebase();
+        }
+
         function toggleLike(pid, type, cid, gid) {
             if (isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) return alert("ロック中のためいいねは押せません。");
@@ -570,7 +652,6 @@
             updateFirebase();
         }
 
-        /* 【修正】文字数制限（絵文字対応）のフォーム生成ロジック */
         function createForm(type, pid, cid) {
             let targetId = '';
             let btnArgs = `'${pid}', '${type}'`;
@@ -592,7 +673,6 @@
             `;
         }
 
-        /* 【追加】サロゲートペア（絵文字）に対応したリアルタイムバリデーション関数 */
         function validateComment(textareaId, counterId, buttonId) {
             const textarea = document.getElementById(textareaId);
             const counter = document.getElementById(counterId);
@@ -600,7 +680,6 @@
             if (!textarea || !counter || !button) return;
             
             const text = textarea.value;
-            // スプレッド演算子で配列展開することにより絵文字を正確に1文字としてカウント
             const count = [...text].length; 
             
             counter.textContent = `${count} / 150文字`;
@@ -609,7 +688,6 @@
                 counter.style.color = '#666';
                 button.disabled = false;
             } else {
-                // 150文字を超過した場合はカウンター表示を危険色（赤）に変更
                 counter.style.color = count > 150 ? '#d9534f' : '#666'; 
                 button.disabled = true;
             }
@@ -642,18 +720,6 @@
             updateFirebase();
         }
 
-        function editItem(pid, type, cid, gid) {
-            if (isReviewMode) return;
-            const pin = appData.pins.find(p => p.id === pid);
-            let target;
-            if (type === 'main') target = pin.mainComment;
-            else if (type === 'child') target = pin.children.find(c => c.id === cid);
-            else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
-            if (!target) return;
-            const n = prompt("修正", target.text);
-            if (n && n.trim()) { target.text = n.trim(); updateFirebase(); }
-        }
-
         function deleteItem(pid, type, cid, gid) {
             if (!confirm("削除しますか？") || isReviewMode) return;
             const pin = appData.pins.find(p => p.id === pid);
@@ -681,11 +747,9 @@
             a.click();
         }
 
-        /* Excel用 CSV書き出し機能 */
         function exportCSV() {
             if (!appData.pins || appData.pins.length === 0) return alert("書き出すデータ（ピン）がありません。");
             
-            // UTF-8 のBOM（Excelでの日本語文字化け防止用）
             let csvContent = "\uFEFF"; 
             csvContent += "ピン番号,フェーズ(色),投稿種別,投稿者,コメント内容,いいね数\n";
 
@@ -723,10 +787,9 @@
             a.click();
         }
 
-        /* CSV用文字列エスケープ処理 */
         function escapeCSV(val) {
             if (!val) return "";
-            let str = val.replace(/"/g, '""'); // ダブルクォーテーションをエスケープ
+            let str = val.replace(/"/g, '""'); 
             if (str.includes(",") || str.includes("\n") || str.includes("\r") || str.includes('"')) {
                 str = `"${str}"`;
             }
