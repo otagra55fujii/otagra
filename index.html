@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v041)</title>
+    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v042)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -421,7 +421,6 @@
                 createdBy: currentUser.name 
             });
             
-            /* 【修正】ピンを設置した瞬間に、そのピンを自動的に「選択（アクティブ）」状態にする */
             activePinId = newId; 
             updateFirebase();
         });
@@ -473,7 +472,7 @@
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
             
             if (!isReviewMode) {
-                const hasComments = pin.mainComment !== null;
+                const hasComments = !!pin.mainComment; // 【重要修正】Firebase保存時にnullがundefined化する挙動に完全対応
                 const isCreator = pin.createdBy === currentUser.name;
                 
                 if (currentUser.role === 'admin') {
@@ -516,7 +515,6 @@
             const gidArg = gid ? `'${gid}'` : 'null';
             const canEdit = ((currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked)) && !isReviewMode;
             
-            // 【変更】インライン編集フォームに切り替えるため、一意のDOM要素IDを生成
             const itemId = `item-${pid}-${type}-${cid || 'none'}-${gid || 'none'}`;
             const editBtn = canEdit ? `<button onclick="startEdit('${pid}','${type}',${cidArg},${gidArg}, '${itemId}')">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
             
@@ -541,7 +539,7 @@
             `;
         }
 
-        /* 【追加】コメントの「インライン修正フォーム」を展開する関数 */
+        /* コメントの「インライン修正フォーム」を展開する関数 */
         function startEdit(pid, type, cid, gid, itemId) {
             const pin = appData.pins.find(p => p.id === pid);
             let target;
@@ -553,12 +551,11 @@
 
             const block = document.getElementById(itemId);
             const originalText = target.text;
-            const currentCount = [...originalText].length; // 絵文字対応カウント
+            const currentCount = [...originalText].length; 
 
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
 
-            // コメントブロックの内側をテキストエリアとカウンター付きフォームに動的書き換え
             block.innerHTML = `
                 <div class="comment-header">
                     <span><b>${target.author} (編集推敲中)</b></span>
@@ -575,11 +572,10 @@
                 </div>
             `;
             
-            // 初回表示時のカウンターバリデーションを適用
             validateEdit(`edit-txt-${itemId}`, `edit-counter-${itemId}`, `edit-btn-${itemId}`);
         }
 
-        /* 【追加】修正用テキストエリアの絵文字対応リアルタイムバリデーション */
+        /* 修正用テキストエリアの絵文字対応リアルタイムバリデーション */
         function validateEdit(textareaId, counterId, buttonId) {
             const textarea = document.getElementById(textareaId);
             const counter = document.getElementById(counterId);
@@ -602,7 +598,7 @@
             }
         }
 
-        /* 【追加】修正したコメントを保存して同期する関数 */
+        /* 修正したコメントを保存して同期する関数 */
         function saveEdit(pid, type, cid, gid, textareaId) {
             if (isReviewMode) return;
             const txt = document.getElementById(textareaId).value.trim();
@@ -616,7 +612,6 @@
             
             if (!target) return;
             
-            // サーバー送信前の最終文字数チェック
             const count = [...txt].length;
             if (count > 150) return alert("150文字を超えているため保存できません。");
 
