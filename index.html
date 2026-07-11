@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ワークショップ特化版)</title>
+    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v040)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -38,7 +38,7 @@
         .comment-text { font-size: 14px; margin-bottom: 8px; word-wrap: break-word; }
         .comment-actions button { font-size: 11px; margin-right: 5px; cursor: pointer; }
         
-        /* 【追加】いいね！スタンプボタン */
+        /* いいね！スタンプボタン */
         .like-btn { background: #f1f1f1; border: 1px solid #ccc; border-radius: 12px; padding: 2px 8px; font-size: 11px; cursor: pointer; transition: all 0.2s; font-weight: bold; color: #555; display: inline-flex; align-items: center; gap: 4px; }
         .like-btn.liked { background: #ffebee; border-color: #ff8a80; color: #e53935; }
         .like-btn:hover { background: #e0e0e0; }
@@ -48,6 +48,7 @@
         .add-comment-form { display: flex; flex-direction: row; gap: 5px; margin-top: 8px; align-items: center; width: 100%; }
         .add-comment-form textarea { flex: 1; resize: none; padding: 6px; border: 1px solid var(--border); border-radius: 4px; height: 36px; font-size: 14px; line-height: 1.4; }
         .add-comment-form button { height: 36px; padding: 0 15px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; white-space: nowrap; }
+        .add-comment-form button:disabled { background: #ccc; cursor: not-allowed; }
         
         /* 画面最下部に常時固定される極薄ステータスバー */
         #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #0d47a1; padding: 6px 12px; z-index: 100; box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
@@ -98,7 +99,7 @@
     <div id="main-screen">
         <!-- 上半分：画像エリア -->
         <div id="image-area">
-            <!-- 【追加】ピンの全体見渡し切り替えフロートボタン -->
+            <!-- ピンの全体見渡し切り替えフロートボタン -->
             <button id="btn-pin-toggle" class="hidden" onclick="togglePinVisibility()" style="position: absolute; top: 10px; right: 10px; z-index: 100; background: rgba(0,0,0,0.7); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 ピン: 表示中</button>
             <div id="image-container">
                 <img id="main-image" src="" style="display:none;">
@@ -131,7 +132,7 @@
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
                     <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
-                    <!-- 【追加】Excel用CSV書き出しボタン -->
+                    <!-- Excel用CSV書き出しボタン -->
                     <button onclick="exportCSV()" class="action-btn" style="background: #00796b; color: white;">📊 コメントをExcel用に書き出し(CSV)</button>
                     <button onclick="clearRoom()" class="action-btn" style="background: #e53935; color: white;">🧹 部屋のデータを初期化</button>
                 </div>
@@ -182,7 +183,7 @@
         let activePinId = null;
         let isReviewMode = false;
         
-        // 【ローカルステート】ピンの表示切り替え（'normal' / 'semi' / 'hidden'）
+        // ローカルステート】ピンの表示切り替え（'normal' / 'semi' / 'hidden'）
         let pinVisibilityState = 'normal'; 
 
         const ADMIN_CODE = "ADMIN123";
@@ -268,7 +269,7 @@
             });
         }
 
-        /* 【補強】いいねスタンプのデータ構造が壊れないように補修 */
+        /* いいねスタンプのデータ構造が壊れないように補修 */
         function repairDataStructure() {
             if (appData.pins) {
                 if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
@@ -385,7 +386,7 @@
             }
         }
 
-        /* 【新機能】ピンの全体見渡し切り替え（表示 ➔ 半透明 ➔ 非表示） */
+        /* ピンの全体見渡し切り替え（表示 ➔ 半透明 ➔ 非表示） */
         function togglePinVisibility() {
             const btn = document.getElementById('btn-pin-toggle');
             if (pinVisibilityState === 'normal') {
@@ -414,12 +415,14 @@
                 x: ((e.clientX - rect.left) / rect.width) * 100,
                 y: ((e.clientY - rect.top) / rect.height) * 100,
                 color: chosenColor, 
-                mainComment: null, children: []
+                mainComment: null, 
+                children: [],
+                createdBy: currentUser.name // 【追加】ピンの誤タップ救済判定用に制作者を記録
             });
             updateFirebase();
         });
 
-        /* 【補強】ピン表示切り替えの反映と、フロート表示の制御 */
+        /* ピン表示切り替えの反映と、フロート表示の制御 */
         function renderApp() {
             const imgEl = document.getElementById('main-image');
             const pinToggleBtn = document.getElementById('btn-pin-toggle');
@@ -467,8 +470,18 @@
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666; padding: 20px 0;">ピンを選択するとコメントが表示されます</p>'; return; }
             
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
-            if (currentUser.role === 'admin' && !isReviewMode) {
-                html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ ピンを削除</button>`;
+            
+            // 【修正】ピンの誤タップ救済機能（案A）の表示ロジック
+            if (!isReviewMode) {
+                const hasComments = pin.mainComment !== null;
+                const isCreator = pin.createdBy === currentUser.name;
+                
+                if (currentUser.role === 'admin') {
+                    html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ 管理者権限で削除</button>`;
+                } else if (isCreator && !hasComments) {
+                    // 一般ユーザーでも「自分が立てたピン」かつ「コメント無し」なら即時削除可能
+                    html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">❌ このピンを削除する</button>`;
+                }
             }
             html += `</div>`;
 
@@ -498,7 +511,7 @@
             container.innerHTML = html;
         }
 
-        /* 【新機能】「いいね！スタンプ」を反映したコメント描画 */
+        /* 「いいね！スタンプ」を反映したコメント描画 */
         function renderItem(item, type, pid, cid, gid) {
             const cidArg = cid ? `'${cid}'` : 'null';
             const gidArg = gid ? `'${gid}'` : 'null';
@@ -528,7 +541,7 @@
             `;
         }
 
-        /* 【新機能】「いいね！」スタンプのトグル処理 */
+        /* 「いいね！」スタンプのトグル処理 */
         function toggleLike(pid, type, cid, gid) {
             if (isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) return alert("ロック中のためいいねは押せません。");
@@ -557,13 +570,49 @@
             updateFirebase();
         }
 
+        /* 【修正】文字数制限（絵文字対応）のフォーム生成ロジック */
         function createForm(type, pid, cid) {
             let targetId = '';
             let btnArgs = `'${pid}', '${type}'`;
             if (type === 'main') { targetId = `in-main-${pid}`; btnArgs += `, null`; }
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
-            return `<div class="add-comment-form"><textarea id="${targetId}" maxlength="150" placeholder="コメントを入力..."></textarea><button onclick="addItem(${btnArgs})">投稿</button></div>`;
+            
+            const counterId = `counter-${targetId}`;
+            const btnId = `btn-${targetId}`;
+            
+            return `
+                <div style="width: 100%; margin-top: 8px;">
+                    <div class="add-comment-form">
+                        <textarea id="${targetId}" placeholder="コメントを入力（150文字以内）..." oninput="validateComment('${targetId}', '${counterId}', '${btnId}')"></textarea>
+                        <button id="${btnId}" onclick="addItem(${btnArgs})" disabled>投稿</button>
+                    </div>
+                    <div style="text-align: right; font-size: 11px; color: #666; margin-top: 2px;" id="${counterId}">0 / 150文字</div>
+                </div>
+            `;
+        }
+
+        /* 【追加】サロゲートペア（絵文字）に対応したリアルタイムバリデーション関数 */
+        function validateComment(textareaId, counterId, buttonId) {
+            const textarea = document.getElementById(textareaId);
+            const counter = document.getElementById(counterId);
+            const button = document.getElementById(buttonId);
+            if (!textarea || !counter || !button) return;
+            
+            const text = textarea.value;
+            // スプレッド演算子で配列展開することにより絵文字を正確に1文字としてカウント
+            const count = [...text].length; 
+            
+            counter.textContent = `${count} / 150文字`;
+            
+            if (count > 0 && count <= 150) {
+                counter.style.color = '#666';
+                button.disabled = false;
+            } else {
+                // 150文字を超過した場合はカウンター表示を危険色（赤）に変更
+                counter.style.color = count > 150 ? '#d9534f' : '#666'; 
+                button.disabled = true;
+            }
         }
 
         function addItem(pid, type, cid) {
@@ -632,7 +681,7 @@
             a.click();
         }
 
-        /* 【新機能】Excel用 CSV書き出し機能 */
+        /* Excel用 CSV書き出し機能 */
         function exportCSV() {
             if (!appData.pins || appData.pins.length === 0) return alert("書き出すデータ（ピン）がありません。");
             
