@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v042)</title>
+    <title>画像マッピングコメント機能 (ワークショップ特化版 vmcGemi_v043)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -269,7 +269,7 @@
             });
         }
 
-        /* いいねスタンプのデータ構造が壊れないように補修 */
+        /* いいねスタンプのデータ構造補修 */
         function repairDataStructure() {
             if (appData.pins) {
                 if (!Array.isArray(appData.pins)) appData.pins = Object.values(appData.pins);
@@ -314,22 +314,36 @@
             if (activeBtn) activeBtn.classList.add('active');
         }
 
+        /* 以下の基本設定変更もトランザクション対応にして安全性を強化 */
         function setNextPinColor(color) {
             if (isReviewMode || currentUser.role !== 'admin') return;
-            appData.currentPinColor = color;
-            updateFirebase();
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData) return currentData;
+                currentData.currentPinColor = color;
+                return currentData;
+            });
         }
 
         function generateInviteCode() {
             if (currentUser.role !== 'admin' || isReviewMode) return;
             const newCode = Math.floor(1000 + Math.random() * 9000).toString();
             if (confirm(`参加者用の招待コードを「 ${newCode} 」に変更しますか？`)) {
-                appData.inviteCode = newCode;
-                updateFirebase();
+                db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                    if (!currentData) return currentData;
+                    currentData.inviteCode = newCode;
+                    return currentData;
+                });
             }
         }
 
-        function toggleLock() { if(isReviewMode) return; appData.locked = !appData.locked; updateFirebase(); }
+        function toggleLock() { 
+            if(isReviewMode || currentUser.role !== 'admin') return; 
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData) return currentData;
+                currentData.locked = !currentData.locked;
+                return currentData;
+            });
+        }
         
         function updateFirebase() { 
             if (isReviewMode) return;
@@ -338,12 +352,9 @@
 
         function loadImage(event) {
             if (isReviewMode) return;
-            
             if (!confirm("新しい画像を読み込みますか？\n（現在配置されているピンやコメントはすべてリセットされます）")) {
-                event.target.value = ""; 
-                return;
+                event.target.value = ""; return;
             }
-
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -369,16 +380,9 @@
 
         function clearRoom() {
             if (isReviewMode || currentUser.role !== 'admin') return;
-            
-            if (confirm("⚠️ 警告: この部屋のデータを完全に初期化しますか？\n配置された画像、すべてのピン、コメントが完全に消去されます。\n\n※消去する前にバックアップ（JSON保存）を取ることを強くお勧めします。")) {
-                if (confirm("本当に初期化してよろしいですか？（最終確認：この操作は取り消せません）")) {
-                    appData = { 
-                        imageSrc: "", 
-                        pins: [], 
-                        locked: false, 
-                        inviteCode: appData.inviteCode || "1234", 
-                        currentPinColor: "red" 
-                    };
+            if (confirm("⚠️ 警告: この部屋のデータを完全に初期化しますか？\n配置された画像、すべてのピン、コメントが完全に消去されます。")) {
+                if (confirm("本当に初期化してよろしいですか？（最終確認）")) {
+                    appData = { imageSrc: "", pins: [], locked: false, inviteCode: appData.inviteCode || "1234", currentPinColor: "red" };
                     activePinId = null;
                     updateFirebase();
                     alert("部屋のデータを初期化しました。");
@@ -386,22 +390,15 @@
             }
         }
 
-        /* ピンの全体見渡し切り替え（表示 ➔ 半透明 ➔ 非表示） */
         function togglePinVisibility() {
             const btn = document.getElementById('btn-pin-toggle');
-            if (pinVisibilityState === 'normal') {
-                pinVisibilityState = 'semi';
-                btn.innerText = '📍 ピン: 半透明';
-            } else if (pinVisibilityState === 'semi') {
-                pinVisibilityState = 'hidden';
-                btn.innerText = '📍 ピン: 非表示';
-            } else {
-                pinVisibilityState = 'normal';
-                btn.innerText = '📍 ピン: 表示中';
-            }
+            if (pinVisibilityState === 'normal') { pinVisibilityState = 'semi'; btn.innerText = '📍 ピン: 半透明'; }
+            else if (pinVisibilityState === 'semi') { pinVisibilityState = 'hidden'; btn.innerText = '📍 ピン: 非表示'; }
+            else { pinVisibilityState = 'normal'; btn.innerText = '📍 ピン: 表示中'; }
             renderApp();
         }
 
+        /* 📍 ピン配置の衝突回避トランザクション化 */
         document.getElementById('image-container').addEventListener('click', function(e) {
             if (e.target.classList.contains('pin') || !appData.imageSrc || isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) { alert("ロック中のためピンを立てられません。"); return; }
@@ -410,34 +407,35 @@
             const chosenColor = appData.currentPinColor || 'red';
             const newId = Date.now().toString();
 
-            appData.pins.push({
-                id: newId,
-                number: appData.pins.length + 1,
-                x: ((e.clientX - rect.left) / rect.width) * 100,
-                y: ((e.clientY - rect.top) / rect.height) * 100,
-                color: chosenColor, 
-                mainComment: null, 
-                children: [],
-                createdBy: currentUser.name 
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData) return currentData;
+                if (!currentData.pins) currentData.pins = [];
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                
+                if (currentUser.role !== 'admin' && currentData.locked) return currentData;
+
+                currentData.pins.push({
+                    id: newId,
+                    number: currentData.pins.length + 1,
+                    x: ((e.clientX - rect.left) / rect.width) * 100,
+                    y: ((e.clientY - rect.top) / rect.height) * 100,
+                    color: currentData.currentPinColor || chosenColor, 
+                    mainComment: null, 
+                    children: [],
+                    createdBy: currentUser.name 
+                });
+                return currentData;
+            }, (error, committed, snapshot) => {
+                if (committed) { activePinId = newId; }
             });
-            
-            activePinId = newId; 
-            updateFirebase();
         });
 
         function renderApp() {
             const imgEl = document.getElementById('main-image');
             const pinToggleBtn = document.getElementById('btn-pin-toggle');
             
-            if (appData.imageSrc) { 
-                imgEl.src = appData.imageSrc; 
-                imgEl.style.display = 'block'; 
-                pinToggleBtn.classList.remove('hidden'); 
-            } else { 
-                imgEl.style.display = 'none'; 
-                imgEl.src = ""; 
-                pinToggleBtn.classList.add('hidden');
-            }
+            if (appData.imageSrc) { imgEl.src = appData.imageSrc; imgEl.style.display = 'block'; pinToggleBtn.classList.remove('hidden'); }
+            else { imgEl.style.display = 'none'; imgEl.src = ""; pinToggleBtn.classList.add('hidden'); }
             
             const container = document.getElementById('pins-container');
             container.innerHTML = '';
@@ -445,18 +443,12 @@
                 const el = document.createElement('div');
                 el.className = `pin ${pin.id === activePinId ? 'active' : ''}`;
                 el.style.left = `${pin.x}%`; el.style.top = `${pin.y}%`;
-                
                 if (pin.id !== activePinId) {
                     const pColor = pin.color || 'red';
                     el.style.backgroundColor = PIN_COLORS[pColor] || pColor;
-                    
-                    if (pinVisibilityState === 'semi') {
-                        el.style.opacity = '0.15';
-                    } else if (pinVisibilityState === 'hidden') {
-                        el.style.display = 'none';
-                    }
+                    if (pinVisibilityState === 'semi') el.style.opacity = '0.15';
+                    else if (pinVisibilityState === 'hidden') el.style.display = 'none';
                 }
-                
                 el.innerText = pin.number;
                 el.onclick = (e) => { e.stopPropagation(); activePinId = pin.id; renderApp(); };
                 container.appendChild(el);
@@ -470,11 +462,9 @@
             if (!pin) { container.innerHTML = '<p style="text-align:center; color:#666; padding: 20px 0;">ピンを選択するとコメントが表示されます</p>'; return; }
             
             let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">No.${pin.number}</h3>`;
-            
             if (!isReviewMode) {
-                const hasComments = !!pin.mainComment; // 【重要修正】Firebase保存時にnullがundefined化する挙動に完全対応
+                const hasComments = !!pin.mainComment;
                 const isCreator = pin.createdBy === currentUser.name;
-                
                 if (currentUser.role === 'admin') {
                     html += `<button onclick="deletePin('${pin.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🗑️ 管理者権限で削除</button>`;
                 } else if (isCreator && !hasComments) {
@@ -483,9 +473,7 @@
             }
             html += `</div>`;
 
-            if (appData.locked || isReviewMode) {
-                html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 閲覧専用(ロック)</p>`;
-            }
+            if (appData.locked || isReviewMode) html += `<p style="color:var(--danger); font-weight:bold; font-size:12px; margin:5px 0 15px 0;">🔒 閲覧専用(ロック)</p>`;
 
             if (!pin.mainComment) {
                 if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('main', pin.id, null);
@@ -494,9 +482,7 @@
                 html += renderItem(pin.mainComment, 'main', pin.id, null, null);
                 (pin.children || []).forEach(c => {
                     html += `<div class="child-comment">${renderItem(c, 'child', pin.id, c.id, null)}`;
-                    (c.grandchildren || []).forEach(g => {
-                        html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`;
-                    });
+                    (c.grandchildren || []).forEach(g => { html += `<div class="grandchild-comment">${renderItem(g, 'grand', pin.id, c.id, g.id)}</div>`; });
                     if (!(c.grandchildren) || c.grandchildren.length < 10) {
                         if ((currentUser.role === 'admin' || !appData.locked) && !isReviewMode) html += createForm('grand', pin.id, c.id);
                     }
@@ -509,21 +495,16 @@
             container.innerHTML = html;
         }
 
-        /* コメント単体の描画ロジック */
         function renderItem(item, type, pid, cid, gid) {
-            const cidArg = cid ? `'${cid}'` : 'null';
-            const gidArg = gid ? `'${gid}'` : 'null';
+            const cidArg = cid ? `'${cid}'` : 'null'; const gidArg = gid ? `'${gid}'` : 'null';
             const canEdit = ((currentUser.role === 'admin') || (currentUser.name === item.author && !appData.locked)) && !isReviewMode;
-            
             const itemId = `item-${pid}-${type}-${cid || 'none'}-${gid || 'none'}`;
             const editBtn = canEdit ? `<button onclick="startEdit('${pid}','${type}',${cidArg},${gidArg}, '${itemId}')">修正</button><button onclick="deleteItem('${pid}','${type}',${cidArg},${gidArg})">削除</button>` : '';
             
-            const likesObj = item.likes || {};
-            const likeCount = Object.keys(likesObj).length;
+            const likesObj = item.likes || {}; const likeCount = Object.keys(likesObj).length;
             const hasLiked = !!likesObj[currentUser.name];
             const likeBtnLabel = hasLiked ? `❤️ ${likeCount}` : `🤍 ${likeCount}`;
             const likeBtnClass = hasLiked ? 'liked' : '';
-            
             const canLike = !isReviewMode && (currentUser.role === 'admin' || !appData.locked);
             const likeDisabledAttr = canLike ? '' : 'disabled style="cursor: not-allowed; opacity: 0.6;"';
 
@@ -539,27 +520,20 @@
             `;
         }
 
-        /* コメントの「インライン修正フォーム」を展開する関数 */
         function startEdit(pid, type, cid, gid, itemId) {
             const pin = appData.pins.find(p => p.id === pid);
             let target;
             if (type === 'main') target = pin.mainComment;
             else if (type === 'child') target = pin.children.find(c => c.id === cid);
             else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
-            
             if (!target) return;
 
             const block = document.getElementById(itemId);
-            const originalText = target.text;
-            const currentCount = [...originalText].length; 
-
-            const cidArg = cid ? `'${cid}'` : 'null';
-            const gidArg = gid ? `'${gid}'` : 'null';
+            const originalText = target.text; const currentCount = [...originalText].length;
+            const cidArg = cid ? `'${cid}'` : 'null'; const gidArg = gid ? `'${gid}'` : 'null';
 
             block.innerHTML = `
-                <div class="comment-header">
-                    <span><b>${target.author} (編集推敲中)</b></span>
-                </div>
+                <div class="comment-header"><span><b>${target.author} (編集推敲中)</b></span></div>
                 <div class="add-comment-form" style="margin-top:5px;">
                     <textarea id="edit-txt-${itemId}" oninput="validateEdit('edit-txt-${itemId}', 'edit-counter-${itemId}', 'edit-btn-${itemId}')" style="height:60px;">${originalText}</textarea>
                 </div>
@@ -571,96 +545,71 @@
                     </div>
                 </div>
             `;
-            
             validateEdit(`edit-txt-${itemId}`, `edit-counter-${itemId}`, `edit-btn-${itemId}`);
         }
 
-        /* 修正用テキストエリアの絵文字対応リアルタイムバリデーション */
         function validateEdit(textareaId, counterId, buttonId) {
-            const textarea = document.getElementById(textareaId);
-            const counter = document.getElementById(counterId);
-            const button = document.getElementById(buttonId);
+            const textarea = document.getElementById(textareaId); const counter = document.getElementById(counterId); const button = document.getElementById(buttonId);
             if (!textarea || !counter || !button) return;
-            
-            const text = textarea.value;
-            const count = [...text].length; 
-            
-            counter.textContent = `${count} / 150文字`;
-            
-            if (count > 0 && count <= 150) {
-                counter.style.color = '#666';
-                button.disabled = false;
-                button.style.backgroundColor = 'var(--primary)';
-            } else {
-                counter.style.color = count > 150 ? '#d9534f' : '#666'; 
-                button.disabled = true;
-                button.style.backgroundColor = '#ccc';
-            }
+            const count = [...textarea.value].length; counter.textContent = `${count} / 150文字`;
+            if (count > 0 && count <= 150) { counter.style.color = '#666'; button.disabled = false; button.style.backgroundColor = 'var(--primary)'; } 
+            else { counter.style.color = count > 150 ? '#d9534f' : '#666'; button.disabled = true; button.style.backgroundColor = '#ccc'; }
         }
 
-        /* 修正したコメントを保存して同期する関数 */
+        /* 📝 コメント修正の衝突回避トランザクション化 */
         function saveEdit(pid, type, cid, gid, textareaId) {
             if (isReviewMode) return;
-            const txt = document.getElementById(textareaId).value.trim();
-            if (!txt) return;
+            const txt = document.getElementById(textareaId).value.trim(); if (!txt) return;
+            if ([...txt].length > 150) return alert("150文字を超えているため保存できません。");
 
-            const pin = appData.pins.find(p => p.id === pid);
-            let target;
-            if (type === 'main') target = pin.mainComment;
-            else if (type === 'child') target = pin.children.find(c => c.id === cid);
-            else target = pin.children.find(c => c.id === cid).grandchildren.find(g => g.id === gid);
-            
-            if (!target) return;
-            
-            const count = [...txt].length;
-            if (count > 150) return alert("150文字を超えているため保存できません。");
-
-            target.text = txt;
-            updateFirebase();
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData || !currentData.pins) return currentData;
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                const pin = currentData.pins.find(p => p.id === pid); if (!pin) return currentData;
+                
+                let target;
+                if (type === 'main') target = pin.mainComment;
+                else if (type === 'child') target = (pin.children || []).find(c => c.id === cid);
+                else { const child = (pin.children || []).find(c => c.id === cid); if (child) target = (child.grandchildren || []).find(g => g.id === gid); }
+                
+                if (!target) return currentData;
+                target.text = txt;
+                return currentData;
+            });
         }
 
+        /* ❤️ いいねスタンプの衝突回避トランザクション化 */
         function toggleLike(pid, type, cid, gid) {
             if (isReviewMode) return;
             if (currentUser.role !== 'admin' && appData.locked) return alert("ロック中のためいいねは押せません。");
 
-            const pin = appData.pins.find(p => p.id === pid);
-            if (!pin) return;
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData || !currentData.pins) return currentData;
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                const pin = currentData.pins.find(p => p.id === pid); if (!pin) return currentData;
 
-            let target;
-            if (type === 'main') {
-                target = pin.mainComment;
-            } else if (type === 'child') {
-                target = pin.children.find(c => c.id === cid);
-            } else if (type === 'grand') {
-                const child = pin.children.find(c => c.id === cid);
-                if (child) target = child.grandchildren.find(g => g.id === gid);
-            }
+                let target;
+                if (type === 'main') target = pin.mainComment;
+                else if (type === 'child') { if (!pin.children) pin.children = []; target = pin.children.find(c => c.id === cid); } 
+                else if (type === 'grand') { if (!pin.children) pin.children = []; const child = pin.children.find(c => c.id === cid); if (child) { if (!child.grandchildren) child.grandchildren = []; target = child.grandchildren.find(g => g.id === gid); } }
 
-            if (!target) return;
-            if (!target.likes) target.likes = {};
-
-            if (target.likes[currentUser.name]) {
-                delete target.likes[currentUser.name];
-            } else {
-                target.likes[currentUser.name] = true;
-            }
-            updateFirebase();
+                if (!target) return currentData;
+                if (!target.likes) target.likes = {};
+                if (target.likes[currentUser.name]) delete target.likes[currentUser.name];
+                else target.likes[currentUser.name] = true;
+                return currentData;
+            });
         }
 
         function createForm(type, pid, cid) {
-            let targetId = '';
-            let btnArgs = `'${pid}', '${type}'`;
+            let targetId = ''; let btnArgs = `'${pid}', '${type}'`;
             if (type === 'main') { targetId = `in-main-${pid}`; btnArgs += `, null`; }
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
-            
-            const counterId = `counter-${targetId}`;
-            const btnId = `btn-${targetId}`;
-            
             return `
                 <div style="width: 100%; margin-top: 8px;">
                     <div class="add-comment-form">
-                        <textarea id="${targetId}" placeholder="コメントを入力（150文字以内）..." oninput="validateComment('${targetId}', '${counterId}', '${btnId}')"></textarea>
+                        <textarea id="${targetId}" placeholder="コメントを入力（150文字以内）..." oninput="validateComment('${targetId}', '${counterId = `counter-${targetId}`}', '${btnId = `btn-${targetId}`}')"></textarea>
                         <button id="${btnId}" onclick="addItem(${btnArgs})" disabled>投稿</button>
                     </div>
                     <div style="text-align: right; font-size: 11px; color: #666; margin-top: 2px;" id="${counterId}">0 / 150文字</div>
@@ -669,25 +618,14 @@
         }
 
         function validateComment(textareaId, counterId, buttonId) {
-            const textarea = document.getElementById(textareaId);
-            const counter = document.getElementById(counterId);
-            const button = document.getElementById(buttonId);
+            const textarea = document.getElementById(textareaId); const counter = document.getElementById(counterId); const button = document.getElementById(buttonId);
             if (!textarea || !counter || !button) return;
-            
-            const text = textarea.value;
-            const count = [...text].length; 
-            
-            counter.textContent = `${count} / 150文字`;
-            
-            if (count > 0 && count <= 150) {
-                counter.style.color = '#666';
-                button.disabled = false;
-            } else {
-                counter.style.color = count > 150 ? '#d9534f' : '#666'; 
-                button.disabled = true;
-            }
+            const count = [...textarea.value].length; counter.textContent = `${count} / 150文字`;
+            if (count > 0 && count <= 150) { counter.style.color = '#666'; button.disabled = false; } 
+            else { counter.style.color = count > 150 ? '#d9534f' : '#666'; button.disabled = true; }
         }
 
+        /* 💬 コメント追加の衝突回避トランザクション化（★主コメント被りの自動スライド救済機能付き） */
         function addItem(pid, type, cid) {
             if (isReviewMode) return;
             let targetId = '';
@@ -695,161 +633,120 @@
             else if (type === 'child') targetId = `in-child-${pid}`;
             else if (type === 'grand') targetId = `in-grand-${cid}`;
             
-            const txt = document.getElementById(targetId).value.trim();
-            if (!txt) return;
+            const textarea = document.getElementById(targetId); if (!textarea) return;
+            const txt = textarea.value.trim(); if (!txt) return;
             
-            const pin = appData.pins.find(p => p.id === pid);
+            // 即時入力欄クリア＆バリデーションリセット（送信連打対策）
+            textarea.value = '';
+            const counter = document.getElementById(`counter-${targetId}`); const btn = document.getElementById(`btn-${targetId}`);
+            if (counter) counter.textContent = '0 / 150文字'; if (btn) btn.disabled = true;
+            
             const item = { author: currentUser.name, text: txt, timestamp: Date.now(), id: Date.now().toString(), likes: {} };
             
-            if (type === 'main') pin.mainComment = item;
-            else if (type === 'child') { if (!pin.children) pin.children = []; pin.children.push({ ...item, grandchildren: [] }); }
-            else if (type === 'grand') { const child = pin.children.find(c => c.id === cid); if (!child.grandchildren) child.grandchildren = []; child.grandchildren.push(item); }
-            updateFirebase();
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData) return currentData;
+                if (!currentData.pins) currentData.pins = [];
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                
+                const pin = currentData.pins.find(p => p.id === pid); if (!pin) return currentData;
+                
+                if (type === 'main') {
+                    if (!pin.mainComment) { pin.mainComment = item; } 
+                    else {
+                        // 【同時投稿救済】タッチの差で主コメントが埋まっていたら自動的に「返信」にスライドさせて意見を守る！
+                        if (!pin.children) pin.children = [];
+                        item.text = `[同時投稿] ` + item.text;
+                        pin.children.push({ ...item, grandchildren: [] });
+                    }
+                } else if (type === 'child') {
+                    if (!pin.children) pin.children = []; pin.children.push({ ...item, grandchildren: [] });
+                } else if (type === 'grand') {
+                    if (!pin.children) pin.children = [];
+                    const child = pin.children.find(c => c.id === cid);
+                    if (child) { if (!child.grandchildren) child.grandchildren = []; child.grandchildren.push(item); }
+                }
+                return currentData;
+            });
         }
 
+        /* 🗑️ ピン削除の衝突回避トランザクション化 */
         function deletePin(pid) {
             if (!confirm("ピンを削除しますか？") || isReviewMode) return;
-            appData.pins = appData.pins.filter(p => p.id !== pid);
-            appData.pins.forEach((p, idx) => p.number = idx + 1);
-            activePinId = null;
-            updateFirebase();
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData || !currentData.pins) return currentData;
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                currentData.pins = currentData.pins.filter(p => p.id !== pid);
+                currentData.pins.forEach((p, idx) => p.number = idx + 1);
+                return currentData;
+            }, (error, committed, snapshot) => {
+                if (committed) { activePinId = null; }
+            });
         }
 
+        /* 🗑️ コメント削除の衝突回避トランザクション化 */
         function deleteItem(pid, type, cid, gid) {
             if (!confirm("削除しますか？") || isReviewMode) return;
-            const pin = appData.pins.find(p => p.id === pid);
-            if (type === 'main') { pin.mainComment = null; pin.children = []; }
-            else if (type === 'child') pin.children = pin.children.filter(c => c.id !== cid);
-            else pin.children.find(c => c.id === cid).grandchildren = pin.children.find(c => c.id === cid).grandchildren.filter(g => g.id !== gid);
-            updateFirebase();
+            db.ref('rooms/' + currentRoom).transaction((currentData) => {
+                if (!currentData || !currentData.pins) return currentData;
+                if (!Array.isArray(currentData.pins)) currentData.pins = Object.values(currentData.pins);
+                const pin = currentData.pins.find(p => p.id === pid); if (!pin) return currentData;
+
+                if (type === 'main') { pin.mainComment = null; pin.children = []; }
+                else if (type === 'child') pin.children = (pin.children || []).filter(c => c.id !== cid);
+                else { const child = (pin.children || []).find(c => c.id === cid); if (child) child.grandchildren = (child.grandchildren || []).filter(g => g.id !== gid); }
+                return currentData;
+            });
         }
 
         function saveJSON() {
             const outputData = { roomName: currentRoom, exportedAt: new Date().toLocaleString(), appData: appData };
             const blob = new Blob([JSON.stringify(outputData)], {type: "application/json"});
-            
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const date = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const timeStr = `${year}${month}${date}${hours}${minutes}`;
-
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = `backup_${currentRoom}_${timeStr}.json`;
-            a.click();
+            const now = new Date(); const year = now.getFullYear(); const month = String(now.getMonth() + 1).padStart(2, '0'); const date = String(now.getDate()).padStart(2, '0'); const hours = String(now.getHours()).padStart(2, '0'); const minutes = String(now.getMinutes()).padStart(2, '0');
+            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup_${currentRoom}_${year}${month}${date}${hours}${minutes}.json`; a.click();
         }
 
         function exportCSV() {
             if (!appData.pins || appData.pins.length === 0) return alert("書き出すデータ（ピン）がありません。");
-            
-            let csvContent = "\uFEFF"; 
-            csvContent += "ピン番号,フェーズ(色),投稿種別,投稿者,コメント内容,いいね数\n";
-
+            let csvContent = "\uFEFFピン番号,フェーズ(色),投稿種別,投稿者,コメント内容,いいね数\n";
             appData.pins.forEach(pin => {
                 const phase = pin.color === 'red' ? '前半' : pin.color === 'orange' ? '中盤' : pin.color === 'limegreen' ? '後半' : '前半';
-                
                 if (pin.mainComment) {
-                    const mainLikes = pin.mainComment.likes ? Object.keys(pin.mainComment.likes).length : 0;
-                    csvContent += `${pin.number},${phase},主コメント,${escapeCSV(pin.mainComment.author)},${escapeCSV(pin.mainComment.text)},${mainLikes}\n`;
-                    
+                    csvContent += `${pin.number},${phase},主コメント,${escapeCSV(pin.mainComment.author)},${escapeCSV(pin.mainComment.text)},${pin.mainComment.likes ? Object.keys(pin.mainComment.likes).length : 0}\n`;
                     (pin.children || []).forEach(child => {
-                        const childLikes = child.likes ? Object.keys(child.likes).length : 0;
-                        csvContent += `${pin.number},${phase},返信,${escapeCSV(child.author)},${escapeCSV(child.text)},${childLikes}\n`;
-                        
-                        (child.grandchildren || []).forEach(g => {
-                            const gLikes = g.likes ? Object.keys(g.likes).length : 0;
-                            csvContent += `${pin.number},${phase},再返信,${escapeCSV(g.author)},${escapeCSV(g.text)},${gLikes}\n`;
-                        });
+                        csvContent += `${pin.number},${phase},返信,${escapeCSV(child.author)},${escapeCSV(child.text)},${child.likes ? Object.keys(child.likes).length : 0}\n`;
+                        (child.grandchildren || []).forEach(g => { csvContent += `${pin.number},${phase},再返信,${escapeCSV(g.author)},${escapeCSV(g.text)},${g.likes ? Object.keys(g.likes).length : 0}\n`; });
                     });
                 }
             });
-
             const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const date = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const timeStr = `${year}${month}${date}${hours}${minutes}`;
-
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = `comments_${currentRoom}_${timeStr}.csv`;
-            a.click();
+            const now = new Date(); const year = now.getFullYear(); const month = String(now.getMonth() + 1).padStart(2, '0'); const date = String(now.getDate()).padStart(2, '0'); const hours = String(now.getHours()).padStart(2, '0'); const minutes = String(now.getMinutes()).padStart(2, '0');
+            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `comments_${currentRoom}_${year}${month}${date}${hours}${minutes}.csv`; a.click();
         }
 
-        function escapeCSV(val) {
-            if (!val) return "";
-            let str = val.replace(/"/g, '""'); 
-            if (str.includes(",") || str.includes("\n") || str.includes("\r") || str.includes('"')) {
-                str = `"${str}"`;
-            }
-            return str;
-        }
+        function escapeCSV(val) { if (!val) return ""; let str = val.replace(/"/g, '""'); if (str.includes(",") || str.includes("\n") || str.includes("\r") || str.includes('"')) { str = `"${str}"`; } return str; }
 
         function loadJSON(event) {
             if (isReviewMode) return;
-
-            if (!confirm("外部データを読み込みますか？\n（現在編集中の画面データはすべて上書きされます）")) {
-                event.target.value = ""; 
-                return;
-            }
-
-            const file = event.target.files[0];
-            if (!file) return;
+            if (!confirm("外部データを読み込みますか？\n（現在編集中の画面データはすべて上書きされます）")) { event.target.value = ""; return; }
+            const file = event.target.files[0]; if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const json = JSON.parse(e.target.result);
-                    if (json.roomName && json.appData) appData = json.appData;
-                    else appData = json;
-                    updateFirebase();
-                    alert("データを正常に読み込みました。");
-                } catch (err) { alert("ファイルの読み込みに失敗しました。"); }
-            };
+            reader.onload = (e) => { try { const json = JSON.parse(e.target.result); if (json.roomName && json.appData) appData = json.appData; else appData = json; updateFirebase(); alert("データを正常に読み込みました。"); } catch (err) { alert("ファイルの読み込みに失敗しました。"); } };
             reader.readAsText(file);
         }
 
         function reviewLoadJSON(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+            const file = event.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const json = JSON.parse(e.target.result);
-                    if (json.roomName && json.appData) {
-                        appData = json.appData;
-                        currentRoom = json.roomName;
-                    } else {
-                        appData = json;
-                        currentRoom = "不明な部屋";
-                    }
-                    
+                    if (json.roomName && json.appData) { appData = json.appData; currentRoom = json.roomName; } else { appData = json; currentRoom = "不明な部屋"; }
                     repairDataStructure();
-                    
-                    isReviewMode = true;
-                    currentUser = { name: "閲覧者", role: "user" };
-                    appData.locked = true;
-
-                    document.getElementById('status-text').innerText = `🟢【アルバム】データ閲覧中`;
-                    document.getElementById('room-display').innerText = `🏠 記録: ${currentRoom}`;
-                    document.getElementById('lock-status-display').innerText = `🔒 閲覧専用`;
-                    document.getElementById('lock-status-display').style.backgroundColor = "var(--danger)";
-                    document.getElementById('user-display').innerText = `👤 オフライン`;
-
-                    document.getElementById('login-screen').style.display = 'none';
-                    document.getElementById('main-screen').style.display = 'flex';
-                    
-                    activePinId = null;
-                    renderApp();
-                    alert("保存されたデータを読み込みました！アルバムモードで起動します。");
-                } catch (err) { 
-                    alert("ファイルの読み込みに失敗しました。正しいJSONファイルか確認してください。"); 
-                }
+                    isReviewMode = true; currentUser = { name: "閲覧者", role: "user" }; appData.locked = true;
+                    document.getElementById('status-text').innerText = `🟢【アルバム】データ閲覧中`; document.getElementById('room-display').innerText = `🏠 記録: ${currentRoom}`; document.getElementById('lock-status-display').innerText = `🔒 閲覧専用`; document.getElementById('lock-status-display').style.backgroundColor = "var(--danger)"; document.getElementById('user-display').innerText = `👤 オフライン`;
+                    document.getElementById('login-screen').style.display = 'none'; document.getElementById('main-screen').style.display = 'flex';
+                    activePinId = null; renderApp(); alert("保存されたデータを読み込みました！アルバムモードで起動します。");
+                } catch (err) { alert("ファイルの読み込みに失敗しました。正しいJSONファイルか確認してください。"); }
             };
             reader.readAsText(file);
         }
