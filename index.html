@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>画像マッピングコメント機能 (vmcGemi_v046)</title>
+    <title>画像マッピングコメント機能 (vmcGemi_v047)</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -76,13 +76,11 @@
     <!-- ログイン画面 -->
     <div id="login-screen">
         <div class="login-box">
-            <!-- お気に入りのタイトル名称 -->
             <h2 style="font-size: 18px; color: #333; margin-bottom: 20px; font-weight: bold;">🗺️ 画像マッピングコメント機能</h2>
             
             <input type="text" id="login-name" placeholder="表示名" required>
             <input type="text" id="login-room" placeholder="部屋名 (例: 防犯A)" required>
             
-            <!-- 🔑 招待コードラベルの横に背景と同じ白で配置（ドラッグ選択して確認可能） -->
             <div style="text-align: left; margin-left: 2px; margin-bottom: -5px;">
                 <span style="font-size: 11px; color: #666; font-weight: bold;">招待コード</span>
                 <span style="color: #ffffff; font-size: 11px;">（またはADMIN123）</span>
@@ -90,7 +88,6 @@
             <input type="text" id="login-code" placeholder="コードを入力" maxlength="8" required>
             <button onclick="login()">ログインして参加 🚪</button>
             
-            <!-- 後日の振り返り用セクション（アルバムモード） -->
             <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
             <p style="font-size: 11px; color: #666; margin-bottom:8px;">🎒 配布された保存データをお持ちの方</p>
             <label style="display:block; padding:10px; background:#4CAF50; color:white; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; text-align:center;">
@@ -102,9 +99,7 @@
 
     <!-- メイン画面 -->
     <div id="main-screen">
-        <!-- 上半分：画像エリア -->
         <div id="image-area">
-            <!-- ピンの全体見渡し切り替えフロートボタン -->
             <button id="btn-pin-toggle" class="hidden" onclick="togglePinVisibility()" style="position: absolute; top: 10px; right: 10px; z-index: 100; background: rgba(0,0,0,0.7); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 ピン: 表示中</button>
             <div id="image-container">
                 <img id="main-image" src="" style="display:none;">
@@ -112,20 +107,17 @@
             </div>
         </div>
 
-        <!-- 下半分：コメントエリア -->
         <div id="comment-area">
             <div id="comment-content">
                 <p style="text-align:center; color:#666; margin-top: 20px;">読込中...</p>
             </div>
             
-            <!-- 操作ボタンエリア -->
             <div id="scroll-action-area" style="margin-top: 30px; padding-top: 15px; border-top: 2px dashed #eee;">
                 
                 <!-- 管理者専用ツールバー -->
                 <div id="admin-toolbar" class="hidden">
                     <div id="container-admin-code">🔑 参加者コード: <b id="invite-code-display" style="color:#d32f2f; font-size:13px;">----</b> <button onclick="generateInviteCode()" style="background:none; border:none; color:#0066cc; cursor:pointer; font-size:11px; font-weight:bold; padding:0 2px; text-decoration: underline;">[🔄変更]</button></div>
                     
-                    <!-- 次に配置するピンの色切り替え（タイムライン連動） -->
                     <div class="color-selector-wrapper">
                         <span style="font-size: 11px; color: #555; font-weight: bold;">📍 次のピン色:</span>
                         <button id="btn-col-red" class="color-btn" style="background:#ef5350;" onclick="setNextPinColor('red')">🔴 前半</button>
@@ -137,19 +129,16 @@
                     <label class="action-btn" style="background:#009688; color:white;">🖼️ 画像読込<input type="file" accept="image/*" onchange="loadImage(event)"></label>
                     <label class="action-btn" style="background:#ff9800; color:white;">📂 データ読込(JSON)<input type="file" accept=".json" onchange="loadJSON(event)"></label>
                     <button onclick="saveJSON()" class="action-btn" style="background: #2196F3; color: white;">📥 結果を自分の端末に保存(JSON)</button>
-                    <!-- Excel用CSV書き出しボタン -->
                     <button onclick="exportCSV()" class="action-btn" style="background: #00796b; color: white;">📊 コメントをExcel用に書き出し(CSV)</button>
                     <button onclick="clearRoom()" class="action-btn" style="background: #e53935; color: white;">🧹 部屋のデータを初期化</button>
                 </div>
 
-                <!-- 共通ボタン -->
                 <div style="width: 100%;">
                     <button onclick="logout()" style="width: 100%; background: #757575; color: white; padding: 10px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🚪 退室 (終了する)</button>
                 </div>
             </div>
         </div>
 
-        <!-- 常時固定ステータスバー -->
         <div id="footer">
             <div id="sync-status">
                 <span id="status-text">🔵 同期中</span>
@@ -161,7 +150,7 @@
     </div>
 
     <script>
-        // --- Firebase 設定（v044のものを完全維持） ---
+        // --- Firebase 設定 ---
         const firebaseConfig = {
             apiKey: "AIzaSyC6VadDP1MmJked58qiQ1ybqpJ_Euwtrjs",
             authDomain: "vmcgemi-v010.firebaseapp.com",
@@ -175,7 +164,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // 安定していたグローバル変数を完全復元
         const PIN_COLORS = { red: "#ef5350", orange: "#ff9800", limegreen: "#8bc34a" };
         let currentUser = { name: "", role: "" }; 
         let currentRoom = "default";
@@ -198,7 +186,6 @@
             }
         });
 
-        // 🌟 ログイン処理の堅牢化大改修
         function login(isAutoRun = false) {
             const name = document.getElementById('login-name').value.trim();
             const room = document.getElementById('login-room').value.trim();
@@ -207,17 +194,14 @@
             if (/[\.\$\#\[\]\/]/.test(room)) return alert("部屋名に次の文字は使用できません: . $ # [ ] /");
             currentRoom = room;
 
-            // 【ポイント①】管理者コードでの入室時は、Firebaseの事前チェックをパスして即入室（空の部屋でも絶対にPermissionエラーを起こしません）
             if (code === ADMIN_CODE) { 
                 currentUser = { name, role: 'admin' }; 
                 executeLoginSequence(name, room, code);
                 return;
             } 
 
-            // 【ポイント②】一般参加者は、負荷とセキュリティルールを考慮し、全体の読み込みではなくinviteCodeノードをピンポイントで照合
             db.ref('rooms/' + currentRoom + '/inviteCode').once('value').then((snapshot) => {
                 const savedInviteCode = snapshot.val() || "1234";
-
                 if (code === savedInviteCode) {
                     currentUser = { name, role: 'user' };
                     executeLoginSequence(name, room, code);
@@ -226,15 +210,13 @@
                     return alert("無効なコードです。");
                 }
             }).catch((error) => { 
-                // 【ポイント③】万が一ルール制限や通信エラーが起きた場合は、同期ストリーム側での検証（安全弁）へフォールバック
                 console.log("同期ストリーム検証へフォールバックします。");
                 currentUser = { name, role: 'user' };
-                currentUser.temporaryCodeCheck = code; // リスナー側でチェックするために一時保持
+                currentUser.temporaryCodeCheck = code;
                 executeLoginSequence(name, room, code);
             });
         }
 
-        // ログイン成功後の共通画面遷移シーケンス
         function executeLoginSequence(name, room, code) {
             sessionStorage.setItem('vmc_session', JSON.stringify({ name, room, code }));
             const roleText = currentUser.role === 'admin' ? '管理者' : '参加者';
@@ -262,8 +244,6 @@
             if (isReviewMode) return;
             db.ref('rooms/' + currentRoom).on('value', (snapshot) => {
                 const data = snapshot.val();
-                
-                // 一般参加者かつ、事前の検証を迂回してきた場合のリアルタイムコード検証
                 if (data && currentUser.role === 'user') {
                     const savedInviteCode = data.inviteCode || "1234";
                     const sessionData = JSON.parse(sessionStorage.getItem('vmc_session') || '{}');
@@ -535,8 +515,9 @@
             else if (type === 'child') { targetId = `in-child-${pid}`; btnArgs += `, null`; }
             else if (type === 'grand') { targetId = `in-grand-${cid}`; btnArgs += `, '${cid}'`; }
             
+            // 🌟 ボタンの文言を「⚙️ 競合シミュレーション」に変え、デザインを落ち着いたブルーグレーに統合しました。
             const testBtn = (type === 'main' && currentUser.role === 'admin') ? 
-                `<button onclick="runSimultaneousTest('${pid}')" style="height: 36px; padding: 0 10px; background: #9c27b0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; white-space: nowrap; margin-left:5px;">🚨 3人同時テスト</button>` : '';
+                `<button onclick="runSimultaneousTest('${pid}')" style="height: 36px; padding: 0 10px; background: #546e7a; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; white-space: nowrap; margin-left:5px;">⚙️ 競合シミュレーション</button>` : '';
 
             return `
                 <div style="width: 100%; margin-top: 8px;">
@@ -669,7 +650,7 @@
         function escapeCSV(val) { if (!val) return ""; let str = val.replace(/"/g, '""'); if (str.includes(",") || str.includes("\n") || str.includes("\r") || str.includes('"')) { str = `"${str}"`; } return str; }
 
         function loadJSON(event) {
-            if (isReviewMode) return; if (!confirm("外部データを読み込みますか？\n（現在編集中の画面データはすべて上書きされます）")) { event.target.value = ""; return; }
+            if (isReviewMode) return; if (!confirm("外部データを読み込みますか？\n（現編集中の画面データはすべて上書きされます）")) { event.target.value = ""; return; }
             const file = event.target.files[0]; if (!file) return; const reader = new FileReader();
             reader.onload = (e) => { try { const json = JSON.parse(e.target.result); if (json.roomName && json.appData) appData = json.appData; else appData = json; updateFirebase(); alert("データを正常に読み込みました。"); } catch (err) { alert("ファイルの読み込みに失敗しました。"); } };
             reader.readAsText(file);
